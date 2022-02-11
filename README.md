@@ -6,7 +6,7 @@ The code uses the GPIO interrupt logic to detect button presses. Once the button
 
 [View this README on GitHub.](https://github.com/Infineon/mtb-example-pmg1-usbpd-sink-dps310-i2c-sensor)
 
-[Provide feedback on this code example.](https://cypress.co1.qualtrics.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyMzQxMzAiLCJTcGVjIE51bWJlciI6IjAwMi0zNDEzMCIsIkRvYyBUaXRsZSI6IkVaLVBEJnRyYWRlOyBQTUcxIE1DVTogVVNCUEQgU2luayBEUFMzMTAgSTJDIFNlbnNvciIsInJpZCI6InNvYmkiLCJEb2MgdmVyc2lvbiI6IjEuMC4wIiwiRG9jIExhbmd1YWdlIjoiRW5nbGlzaCIsIkRvYyBEaXZpc2lvbiI6Ik1DRCIsIkRvYyBCVSI6IldJUkVEIiwiRG9jIEZhbWlseSI6IlRZUEUtQyJ9)
+[Provide feedback on this code example.](https://cypress.co1.qualtrics.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyMzQxMzAiLCJTcGVjIE51bWJlciI6IjAwMi0zNDEzMCIsIkRvYyBUaXRsZSI6IkVaLVBEJnRyYWRlOyBQTUcxIE1DVTogVVNCUEQgU2luayBEUFMzMTAgSTJDIFNlbnNvciIsInJpZCI6InNvYmkiLCJEb2MgdmVyc2lvbiI6IjEuMS4wIiwiRG9jIExhbmd1YWdlIjoiRW5nbGlzaCIsIkRvYyBEaXZpc2lvbiI6Ik1DRCIsIkRvYyBCVSI6IldJUkVEIiwiRG9jIEZhbWlseSI6IlRZUEUtQyJ9)
 
 ## Requirements
 
@@ -421,6 +421,7 @@ Document title: *CE234130* – *EZ-PD&trade; PMG1: USBPD Sink DPS310 I2C Sensor*
 | Version | Description of change |
 | ------- | --------------------- |
 | 1.0.0   | New code example      |
+| 1.1.0   | PD 2.0 Compliance & Build Error fix             |
 ------
 
 All other trademarks or registered trademarks referenced herein are the property of their respective owners.
