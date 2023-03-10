@@ -7,8 +7,8 @@
 *
 * Related Document: See README.md
 *
-********************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+*******************************************************************************
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -43,7 +43,7 @@
 #include <config.h>
 #include "cy_pdstack_common.h"
 #include "cy_pdstack_dpm.h"
-#include "cy_pdstack_utils.h"
+#include "cy_pdutils.h"
 #include "pdo.h"
 #include "app.h"
 
@@ -62,7 +62,7 @@ static uint32_t calc_power(uint32_t voltage, uint32_t current)
        Current is expressed in 10 mA units.
        Power should be expressed in 250 mW units.
      */
-    return (div_round_up(voltage * current, 500));
+    return (Cy_PdUtils_DivRoundUp(voltage * current, 500));
 }
 
 static uint32_t calc_current(uint32_t power, uint32_t voltage)
@@ -72,7 +72,7 @@ static uint32_t calc_current(uint32_t power, uint32_t voltage)
        Voltage is expressed in 50 mV units.
        Current should be expressed in 10 mA units.
      */
-    return (div_round_up(power * 500, voltage));
+    return (Cy_PdUtils_DivRoundUp(power * 500, voltage));
 }
 
 /**
@@ -101,7 +101,7 @@ static bool is_src_acceptable_snk(cy_stc_pdstack_context_t* context, cy_pd_pd_do
         case CY_PDSTACK_PDO_FIXED_SUPPLY:  /* Fixed supply PDO */
             fix_volt = pdo_src->fixed_src.voltage;
 
-            maxVolt = div_round_up(fix_volt, 20);
+            maxVolt = Cy_PdUtils_DivRoundUp(fix_volt, 20);
             minVolt = fix_volt - maxVolt;
             maxVolt = fix_volt + maxVolt;
 
@@ -110,7 +110,7 @@ static bool is_src_acceptable_snk(cy_stc_pdstack_context_t* context, cy_pd_pd_do
                 case CY_PDSTACK_PDO_FIXED_SUPPLY:
                     if(fix_volt == pdo_snk->fixed_snk.voltage)
                     {
-                        compare_temp = GET_MAX (max_min_temp, pdo_snk->fixed_snk.opCurrent);
+                        compare_temp = CY_PDUTILS_GET_MAX (max_min_temp, pdo_snk->fixed_snk.opCurrent);
                         if (pdo_src->fixed_src.maxCurrent >= compare_temp)
                         {
                             gl_op_cur_power[port] = pdo_snk->fixed_snk.opCurrent;
@@ -122,7 +122,7 @@ static bool is_src_acceptable_snk(cy_stc_pdstack_context_t* context, cy_pd_pd_do
                 case CY_PDSTACK_PDO_VARIABLE_SUPPLY:
                     if ((minVolt >= pdo_snk->var_snk.minVoltage) && (maxVolt <= pdo_snk->var_snk.maxVoltage))
                     {
-                        compare_temp = GET_MAX (max_min_temp, pdo_snk->var_snk.opCurrent);
+                        compare_temp = CY_PDUTILS_GET_MAX (max_min_temp, pdo_snk->var_snk.opCurrent);
                         if (pdo_src->fixed_src.maxCurrent >= compare_temp)
                         {
                             gl_op_cur_power[port] = pdo_snk->var_snk.opCurrent;
@@ -141,7 +141,7 @@ static bool is_src_acceptable_snk(cy_stc_pdstack_context_t* context, cy_pd_pd_do
                         max_min_temp = calc_current(max_min_temp, minVolt);
 
                         /* Make sure the source can supply the maximum current that may be required. */
-                        compare_temp = GET_MAX(max_min_temp, oper_cur_pwr);
+                        compare_temp = CY_PDUTILS_GET_MAX(max_min_temp, oper_cur_pwr);
                         if (pdo_src->fixed_src.maxCurrent >= compare_temp)
                         {
                             gl_op_cur_power[port] = oper_cur_pwr;
@@ -181,7 +181,7 @@ static bool is_src_acceptable_snk(cy_stc_pdstack_context_t* context, cy_pd_pd_do
                         oper_cur_pwr = calc_power(maxVolt, pdo_snk->var_snk.opCurrent);
                         max_min_temp = calc_power(maxVolt, max_min_temp);
 
-                        compare_temp = GET_MAX (oper_cur_pwr, max_min_temp);
+                        compare_temp = CY_PDUTILS_GET_MAX (oper_cur_pwr, max_min_temp);
                         if (pdo_src->bat_src.maxPower >= compare_temp)
                         {
                             gl_op_cur_power[port] = oper_cur_pwr;
@@ -195,7 +195,7 @@ static bool is_src_acceptable_snk(cy_stc_pdstack_context_t* context, cy_pd_pd_do
                      * This combination is unreliable */
                     if((minVolt >= pdo_snk->bat_snk.minVoltage) && (maxVolt <= pdo_snk->bat_snk.maxVoltage))
                     {
-                        compare_temp = GET_MAX (max_min_temp, pdo_snk->bat_snk.opPower);
+                        compare_temp = CY_PDUTILS_GET_MAX (max_min_temp, pdo_snk->bat_snk.opPower);
                         if (pdo_src->bat_src.maxPower >= compare_temp)
                         {
                             gl_op_cur_power[port] = pdo_snk->bat_snk.opPower;
@@ -230,7 +230,7 @@ static bool is_src_acceptable_snk(cy_stc_pdstack_context_t* context, cy_pd_pd_do
                 case CY_PDSTACK_PDO_VARIABLE_SUPPLY:
                     if((minVolt >= pdo_snk->var_snk.minVoltage) && (maxVolt <= pdo_snk->var_snk.maxVoltage))
                     {
-                        compare_temp = GET_MAX (pdo_snk->var_snk.opCurrent, max_min_temp);
+                        compare_temp = CY_PDUTILS_GET_MAX (pdo_snk->var_snk.opCurrent, max_min_temp);
 
                         if (pdo_src->var_src.maxCurrent >= compare_temp)
                         {
@@ -248,7 +248,7 @@ static bool is_src_acceptable_snk(cy_stc_pdstack_context_t* context, cy_pd_pd_do
                         oper_cur_pwr = calc_current(pdo_snk->bat_snk.opPower, minVolt);
                         max_min_temp = calc_current(max_min_temp, minVolt);
 
-                        compare_temp = GET_MAX (oper_cur_pwr, max_min_temp);
+                        compare_temp = CY_PDUTILS_GET_MAX (oper_cur_pwr, max_min_temp);
                         if (pdo_src->var_src.maxCurrent >= compare_temp)
                         {
                             gl_contract_power[port] = pdo_snk->bat_snk.opPower;
@@ -416,7 +416,7 @@ void eval_src_cap(cy_stc_pdstack_context_t* context, const cy_stc_pdstack_pd_pac
         /* Capability mismatch: Ask for vsafe5v PDO with CapMismatch */
         gl_contract_voltage[port] = snkPdo[0].fixed_snk.voltage;
         gl_op_cur_power[port] = snkPdo[0].fixed_snk.opCurrent;
-        gl_contract_power[port] = div_round_up(
+        gl_contract_power[port] = Cy_PdUtils_DivRoundUp(
                 gl_contract_voltage[port] * gl_op_cur_power[port], 500u);
 
         if(src_vsafe5_cur < gl_op_cur_power[port])

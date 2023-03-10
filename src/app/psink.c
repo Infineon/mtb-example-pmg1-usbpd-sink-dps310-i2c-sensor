@@ -8,8 +8,8 @@
 *
 * Related Document: See README.md
 *
-********************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+*******************************************************************************
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -45,9 +45,9 @@
 #include "config.h"
 #include "psink.h"
 #include "app.h"
-#include <cy_sw_timer.h>
-#include <cy_sw_timer_id.h>
-#include <cy_usbpd_vbus_ctrl.h>
+#include "cy_pdutils_sw_timer.h"
+#include "timer_id.h"
+#include "cy_usbpd_vbus_ctrl.h"
 
 bool gl_psnk_enabled[NO_OF_TYPEC_PORTS] = {
     false
@@ -78,13 +78,13 @@ void sink_fet_off(cy_stc_pdstack_context_t * context)
 #if defined(CY_DEVICE_CCG3PA)
     Cy_USBPD_Vbus_GdrvCfetOff(context->ptrUsbPdContext, VBUS_FET_CTRL);
 #elif defined(CY_DEVICE_PMG1S3)
-    cy_sw_timer_stop(context->ptrTimerContext, CY_PDSTACK_GET_APP_TIMER_ID(context, APP_VBUS_FET_ON_TIMER));
+    Cy_PdUtils_SwTimer_Stop(context->ptrTimerContext, GET_APP_TIMER_ID(context, APP_VBUS_FET_ON_TIMER));
 
     Cy_USBPD_Vbus_NgdoG1Ctrl (context->ptrUsbPdContext, false);
     Cy_USBPD_Vbus_NgdoEqCtrl (context->ptrUsbPdContext, true);
 
-    cy_sw_timer_start(context->ptrTimerContext, context, 
-                    CY_PDSTACK_GET_APP_TIMER_ID(context, APP_VBUS_FET_OFF_TIMER),
+    Cy_PdUtils_SwTimer_Start(context->ptrTimerContext, context, 
+                    GET_APP_TIMER_ID(context, APP_VBUS_FET_OFF_TIMER),
                     APP_VBUS_FET_OFF_TIMER_PERIOD, vbus_fet_off_cbk);
 #else
     Cy_USBPD_Vbus_GdrvCfetOff(context->ptrUsbPdContext, false);
@@ -102,6 +102,7 @@ void vbus_fet_on_cbk (cy_timer_id_t id,  void * context)
 #endif /* defined(CY_DEVICE_PMG1S3) */
 
 
+
 void sink_fet_on(cy_stc_pdstack_context_t * context)
 {
     /* Skip turning ON of the Sink FET if the System is in OFF State.
@@ -116,8 +117,8 @@ void sink_fet_on(cy_stc_pdstack_context_t * context)
 #elif defined(CY_DEVICE_PMG1S3)
     Cy_USBPD_Vbus_NgdoOn(context->ptrUsbPdContext, false);
     
-    cy_sw_timer_start(context->ptrTimerContext, context, 
-                    CY_PDSTACK_GET_APP_TIMER_ID(context, APP_VBUS_FET_ON_TIMER),
+    Cy_PdUtils_SwTimer_Start(context->ptrTimerContext, context, 
+                    GET_APP_TIMER_ID(context, APP_VBUS_FET_ON_TIMER),
                     APP_VBUS_FET_ON_TIMER_PERIOD, vbus_fet_on_cbk);
 #else
     Cy_USBPD_Vbus_GdrvCfetOn(context->ptrUsbPdContext, false);
@@ -149,9 +150,10 @@ bool app_psnk_vbus_ovp_cbk(void * cbkContext, bool comp_out)
 
 #if VBUS_UVP_ENABLE
 
-void app_psnk_vbus_uvp_cbk (cy_stc_usbpd_context_t * context, bool comp_out)
+bool app_psnk_vbus_uvp_cbk (void * context, bool comp_out)
 {
     /* Get the PD-Stack context from the USBPD context */
+    cy_stc_usbpd_context_t * context = (cy_stc_usbpd_context_t *) context;
     cy_stc_pdstack_context_t * pdstack_ctx = get_pdstack_context(context->port);
 
     /* UVP fault */
@@ -159,6 +161,7 @@ void app_psnk_vbus_uvp_cbk (cy_stc_usbpd_context_t * context, bool comp_out)
 
     /* Notify the application layer about the fault. */
     app_event_handler(pdstack_ctx, APP_EVT_VBUS_UVP_FAULT, NULL);
+    return 0;
 }
 
 #endif /* VBUS_UVP_ENABLE */
@@ -178,14 +181,6 @@ void psnk_set_voltage (cy_stc_pdstack_context_t * context, uint16_t volt_mV)
     app_ovp_enable(context, volt_mV, false, app_psnk_vbus_ovp_cbk);
 #endif /* defined(CY_DEVICE_CCG3PA) */
 #endif /* VBUS_OVP_ENABLE */
-
-#if VBUS_UVP_ENABLE
-#if defined(CY_DEVICE_CCG3PA)
-    app_uvp_enable(context, volt_mV, VBUS_FET_CTRL, app_psnk_vbus_uvp_cbk);
-#else
-    app_uvp_enable(context, volt_mV, false, app_psnk_vbus_uvp_cbk);
-#endif /* defined(CY_DEVICE_CCG3PA) */
-#endif /* VBUS_UVP_ENABLE */
 }
 
 void psnk_set_current (cy_stc_pdstack_context_t * context, uint16_t cur_10mA)
@@ -217,7 +212,16 @@ void psnk_set_current (cy_stc_pdstack_context_t * context, uint16_t cur_10mA)
 
 void psnk_enable (cy_stc_pdstack_context_t * context)
 {
-    uint8_t intr_state;
+    uint32_t intr_state;
+
+#if VBUS_UVP_ENABLE
+    app_status_t* app_stat = app_get_status(context->port);
+#if defined(CY_DEVICE_CCG3PA)
+    app_uvp_enable(context, app_stat->psnk_volt, VBUS_FET_CTRL, app_psnk_vbus_uvp_cbk);
+#else
+    app_uvp_enable(context, app_stat->psnk_volt, false, app_psnk_vbus_uvp_cbk);
+#endif /* defined(CY_DEVICE_CCG3PA) */
+#endif /* VBUS_UVP_ENABLE */
 
     intr_state = Cy_SysLib_EnterCriticalSection();
 
@@ -252,30 +256,30 @@ static void app_psnk_tmr_cbk(cy_timer_id_t id,  void * callbackCtx)
 
     if (context->port != 0u)
     {
-        id = (cy_timer_id_t)((uint8_t)id - (uint8_t)APP_TIMERS_START_ID);
+        id = (id & 0x00FFU) + CY_PDUTILS_TIMER_APP_PORT0_START_ID;
     }
 
-    switch((cy_sw_timer_id_t)id)
+    switch((timer_id_t)id)
     {
         case APP_PSINK_DIS_TIMER:
-            cy_sw_timer_stop(context->ptrTimerContext,
-                    CY_PDSTACK_GET_APP_TIMER_ID(context, APP_PSINK_DIS_MONITOR_TIMER));
+            Cy_PdUtils_SwTimer_Stop(context->ptrTimerContext,
+                    GET_APP_TIMER_ID(context, APP_PSINK_DIS_MONITOR_TIMER));
             Cy_USBPD_Vbus_DischargeOff(context->ptrUsbPdContext);
             break;
 
         case APP_PSINK_DIS_MONITOR_TIMER:
             if(vbus_is_present(context, CY_PD_VSAFE_5V, 0) == false)
             {
-                cy_sw_timer_stop(context->ptrTimerContext,
-                        CY_PDSTACK_GET_APP_TIMER_ID(context, APP_PSINK_DIS_TIMER));
+                Cy_PdUtils_SwTimer_Stop(context->ptrTimerContext,
+                        GET_APP_TIMER_ID(context, APP_PSINK_DIS_TIMER));
                 Cy_USBPD_Vbus_DischargeOff(context->ptrUsbPdContext);
                 app_stat->snk_dis_cbk(context);
             }
             else
             {
                 /*Start Monitor Timer again*/
-                cy_sw_timer_start(context->ptrTimerContext, context,
-                        CY_PDSTACK_GET_APP_TIMER_ID(context, APP_PSINK_DIS_MONITOR_TIMER),
+                Cy_PdUtils_SwTimer_Start(context->ptrTimerContext, context,
+                        GET_APP_TIMER_ID(context, APP_PSINK_DIS_MONITOR_TIMER),
                         APP_PSINK_DIS_MONITOR_TIMER_PERIOD, app_psnk_tmr_cbk);
             }
             break;
@@ -287,7 +291,7 @@ static void app_psnk_tmr_cbk(cy_timer_id_t id,  void * callbackCtx)
 
 void psnk_disable (cy_stc_pdstack_context_t * context, cy_pdstack_sink_discharge_off_cbk_t snk_discharge_off_handler)
 {
-    uint8_t intr_state;
+    uint32_t intr_state;
     uint8_t port = context->port;
     app_status_t* app_stat = app_get_status(port);
 
@@ -305,9 +309,9 @@ void psnk_disable (cy_stc_pdstack_context_t * context, cy_pdstack_sink_discharge
     gl_psnk_enabled[port] = false;
 
     Cy_USBPD_Vbus_DischargeOff(context->ptrUsbPdContext);
-    cy_sw_timer_stop_range(context->ptrTimerContext,
-            CY_PDSTACK_GET_APP_TIMER_ID(context, APP_PSINK_DIS_TIMER), 
-            CY_PDSTACK_GET_APP_TIMER_ID(context, APP_PSINK_DIS_MONITOR_TIMER));
+    Cy_PdUtils_SwTimer_StopRange(context->ptrTimerContext,
+            GET_APP_TIMER_ID(context, APP_PSINK_DIS_TIMER), 
+            GET_APP_TIMER_ID(context, APP_PSINK_DIS_MONITOR_TIMER));
 
     if ((snk_discharge_off_handler != NULL) && (context->dpmConfig.dpmEnabled))
     {
@@ -316,11 +320,11 @@ void psnk_disable (cy_stc_pdstack_context_t * context, cy_pdstack_sink_discharge
         app_stat->snk_dis_cbk = snk_discharge_off_handler;
 
         /* Start Power source enable and monitor timers. */
-        cy_sw_timer_start(context->ptrTimerContext, context,
-                CY_PDSTACK_GET_APP_TIMER_ID(context, APP_PSINK_DIS_TIMER),
+        Cy_PdUtils_SwTimer_Start(context->ptrTimerContext, context,
+                GET_APP_TIMER_ID(context, APP_PSINK_DIS_TIMER),
                 APP_PSINK_DIS_TIMER_PERIOD, app_psnk_tmr_cbk);
-        cy_sw_timer_start(context->ptrTimerContext, context,
-                CY_PDSTACK_GET_APP_TIMER_ID(context, APP_PSINK_DIS_MONITOR_TIMER),
+        Cy_PdUtils_SwTimer_Start(context->ptrTimerContext, context,
+                GET_APP_TIMER_ID(context, APP_PSINK_DIS_MONITOR_TIMER),
                 APP_PSINK_DIS_MONITOR_TIMER_PERIOD, app_psnk_tmr_cbk);
     }
 

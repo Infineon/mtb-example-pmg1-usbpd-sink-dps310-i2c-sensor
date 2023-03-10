@@ -8,7 +8,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -40,16 +40,16 @@
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
-#include <cybsp.h>
-#include <charger_detect.h>
-#include <cy_pdstack_common.h>
-#include <cy_pdstack_dpm.h>
-#include <cy_pdstack_utils.h>
-#include <cy_usbpd_bch.h>
-#include <psink.h>
-#include <cy_sw_timer.h>
-#include <cy_sw_timer_id.h>
-#include <app.h>
+#include "cybsp.h"
+#include "charger_detect.h"
+#include "cy_pdstack_common.h"
+#include "cy_pdstack_dpm.h"
+#include "cy_pdutils.h"
+#include "cy_usbpd_bch.h"
+#include "psink.h"
+#include "cy_pdutils_sw_timer.h"
+#include "timer_id.h"
+#include "app.h"
 
 #if (BATTERY_CHARGING_ENABLE)
 
@@ -63,7 +63,7 @@ static void chgdet_timer_cb(cy_timer_id_t id, void *cbContext)
 
     if (stack_ctx->port != 0u)
     {
-        id = (cy_timer_id_t)((uint8_t)id - (uint8_t)APP_TIMERS_START_ID);
+        id = (id & 0x00FFU) + CY_PDUTILS_TIMER_APP_PORT0_START_ID;
     }
 
     if (id == APP_BC_GENERIC_TIMER1)
@@ -110,8 +110,8 @@ static void chgdet_fsm_sink_primary_charger_detect(cy_stc_pdstack_context_t *sta
         case CHGDET_FSM_EVT_ENTRY:
             /* Apply terminations on D+/- and start VDP_DM_SRC_ON timer to schedule the next step. */
             Cy_USBPD_Bch_Phy_ConfigSnkTerm (stack_ctx->ptrUsbPdContext, CHGB_SINK_TERM_PCD);
-            cy_sw_timer_start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
-                    CY_PDSTACK_GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
+            Cy_PdUtils_SwTimer_Start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
+                    GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
                     APP_BC_VDP_DM_SRC_ON_PERIOD, chgdet_timer_cb);
             break;
 
@@ -121,8 +121,8 @@ static void chgdet_fsm_sink_primary_charger_detect(cy_stc_pdstack_context_t *sta
                         CHGB_VREF_0_325V, CHGB_COMP_NO_INTR) == true)
             {
                 /* Start timer for source to differentiate between primary and secondary detection */
-                cy_sw_timer_start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
-                        CY_PDSTACK_GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER2),
+                Cy_PdUtils_SwTimer_Start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
+                        GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER2),
                         APP_BC_VDMSRC_EN_DIS_PERIOD, chgdet_timer_cb);
             }
             else
@@ -172,8 +172,8 @@ static void chgdet_fsm_sink_secondary_charger_detect(cy_stc_pdstack_context_t *s
             Cy_USBPD_Bch_Phy_ConfigSnkTerm(stack_ctx->ptrUsbPdContext, CHGB_SINK_TERM_SCD);
 
             /* Start timer to apply VDM_SRC for TVDM_SRC_ON */
-            cy_sw_timer_start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
-                    CY_PDSTACK_GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
+            Cy_PdUtils_SwTimer_Start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
+                    GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
                     APP_BC_VDP_DM_SRC_ON_PERIOD, chgdet_timer_cb);
             break;
 
@@ -324,9 +324,9 @@ cy_en_usbpd_status_t chgdet_stop(cy_stc_pdstack_context_t *stack_ctx)
     cy_stc_usbpd_context_t *drv_ctx = (cy_stc_usbpd_context_t *)(stack_ctx->ptrUsbPdContext);
 
     Cy_USBPD_Bch_Phy_DisableComp(drv_ctx, 0u);
-    cy_sw_timer_stop_range(stack_ctx->ptrTimerContext,
-            CY_PDSTACK_GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
-            CY_PDSTACK_GET_APP_TIMER_ID(stack_ctx, APP_CDP_DP_DM_POLL_TIMER));
+    Cy_PdUtils_SwTimer_StopRange(stack_ctx->ptrTimerContext,
+            GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
+            GET_APP_TIMER_ID(stack_ctx, APP_CDP_DP_DM_POLL_TIMER));
     Cy_USBPD_Bch_Phy_Dis(drv_ctx);
 
     chgdet_stat->chgdet_fsm_state = CHGDET_FSM_OFF;
@@ -385,7 +385,7 @@ cy_en_usbpd_status_t chgdet_task(cy_stc_pdstack_context_t *stack_ctx)
     }
 
     /* Get the next event to be processed. */
-    evt = event_group_get_event((uint32_t *)&(chgdet_stat->chgdet_evt), true);
+    evt = Cy_PdUtils_EventGroup_GetEvent((uint32_t *)&(chgdet_stat->chgdet_evt), true);
 
     if (evt < CHGDET_FSM_MAX_EVTS)
     {
@@ -407,8 +407,8 @@ bool chgdet_prepare_deepsleep(cy_stc_pdstack_context_t *stack_ctx)
 
     if (
             (chgdet_stat->chgdet_evt == 0u) &&
-            (!cy_sw_timer_range_enabled (stack_ctx->ptrTimerContext,
-                    CY_PDSTACK_GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1), APP_BC_DP_DM_DEBOUNCE_TIMER))
+            (!Cy_PdUtils_SwTimer_RangeEnabled (stack_ctx->ptrTimerContext,
+                    GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1), APP_BC_DP_DM_DEBOUNCE_TIMER))
        )
     {
         Cy_USBPD_Bch_Phy_Config_DeepSleep ((cy_stc_usbpd_context_t *)(stack_ctx->ptrUsbPdContext));

@@ -6,8 +6,9 @@
 *
 * Related Document: See README.md
 *
+*
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -40,12 +41,11 @@
 *******************************************************************************/
 
 #include "cy_pdl.h"
-#include "cyhal.h"
 #include "cybsp.h"
 #include "config.h"
 #include "i2c_master.h"
 
-#include "cy_sw_timer.h"
+#include "cy_pdutils_sw_timer.h"
 #include "cy_usbpd_common.h"
 #include "cy_pdstack_common.h"
 #include "cy_usbpd_typec.h"
@@ -60,21 +60,22 @@
 #include "vdm.h"
 #include "charger_detect.h"
 #include "mtbcfg_ezpd.h"
+#include <stdio.h>
+#include <inttypes.h>
 
+/* CY ASSERT failure */
+#define CY_ASSERT_FAILED    (0u)
 
-cy_stc_sw_timer_t        gl_TimerCtx;
-cy_stc_usbpd_context_t   gl_UsbPdPort0Ctx;
+/* Debug print macro to enable UART print */
+#define DEBUG_PRINT    (1u)
+
+cy_stc_pdutils_sw_timer_t gl_TimerCtx;
+cy_stc_usbpd_context_t gl_UsbPdPort0Ctx;
 
 cy_stc_pdstack_context_t gl_PdStackPort0Ctx;
 
-const cyhal_uart_cfg_t uartConfig =
-{
-    .data_bits      = 8,
-    .stop_bits      = 1,
-    .parity         = CYHAL_UART_PARITY_NONE,
-    .rx_buffer      = NULL,
-    .rx_buffer_size = 0
-};
+/* Structure for UART Context */
+cy_stc_scb_uart_context_t CYBSP_UART_context;
 
 const cy_stc_pdstack_dpm_params_t pdstack_port0_dpm_params =
 {
@@ -149,13 +150,13 @@ static void wdt_interrupt_handler(void)
     /* Clear WDT pending interrupt */
     Cy_WDT_ClearInterrupt();
 
-#if (TIMER_TICKLESS_ENABLE == 0)
+#if (CY_PDUTILS_TIMER_TICKLESS_ENABLE == 0)
     /* Load the timer match register. */
-    Cy_WDT_SetMatch((Cy_WDT_GetCount() + gl_TimerCtx.gl_multiplier))
+    Cy_WDT_SetMatch((Cy_WDT_GetCount() + gl_TimerCtx.multiplier));
 #endif /* (TIMER_TICKLESS_ENABLE == 0) */
 
     /* Invoke the timer handler. */
-    cy_sw_timer_interrupt_handler (&(gl_TimerCtx));
+    Cy_PdUtils_SwTimer_InterruptHandler (&(gl_TimerCtx));
 }
 
 static void cy_usbpd0_intr0_handler(void)
@@ -205,8 +206,8 @@ cy_stc_pdstack_app_cbk_t* app_get_callback_ptr(cy_stc_pdstack_context_t * contex
     return ((cy_stc_pdstack_app_cbk_t *)(&app_callback));
 }
 
-/* The Below section of code implements the De-bounce for the Power button press */
-#if ENABLE_POWER_BUTTON
+/* The Below section of code implements the De-bounce for the User button press */
+#if ENABLE_USER_BUTTON
 
 #define BUTTON_PRESS_DEBOUNCE_TIMER_ID          (0xC1u)
 #define BUTTON_PRESS_DEBOUNCE_TIMER_PERIOD      (100u)
@@ -227,8 +228,8 @@ void user_button_press_timer_cb (
         button_press_count++;
     }
 
-    /* start the power button press debounce timer*/
-    cy_sw_timer_start (&gl_TimerCtx, callbackContext, id, BUTTON_PRESS_DEBOUNCE_TIMER_PERIOD,
+    /* start the user button press debounce timer*/
+    Cy_PdUtils_SwTimer_Start(&gl_TimerCtx, callbackContext, id, BUTTON_PRESS_DEBOUNCE_TIMER_PERIOD,
                     user_button_press_timer_cb);
 }
 
@@ -242,7 +243,7 @@ void gpio_interrupt_handler(void)
         {
             /* Insert logic for High pin state here */
 
-            /* Check if the Power button is pressed longer than the 1.5 second debounce and switch
+            /* Check if the user button is pressed longer than the 1.5 second debounce and switch
              * system power state after the button press was released*/
             if(button_press_count > BUTTON_PRESS_TOTAL_DEBOUNCE_COUNT)
             {
@@ -258,14 +259,13 @@ void gpio_interrupt_handler(void)
 
             }
             button_press_count = 0;
-            cy_sw_timer_stop(&gl_TimerCtx, BUTTON_PRESS_DEBOUNCE_TIMER_ID);
+            Cy_PdUtils_SwTimer_Stop(&gl_TimerCtx, BUTTON_PRESS_DEBOUNCE_TIMER_ID);
         }
         else
         {
             /* Insert logic for Low pin state */
-             cy_sw_timer_start (&gl_TimerCtx, (void *)&gl_PdStackPort0Ctx, (cy_timer_id_t)BUTTON_PRESS_DEBOUNCE_TIMER_ID,
-                     BUTTON_PRESS_DEBOUNCE_TIMER_PERIOD, user_button_press_timer_cb);
-
+            Cy_PdUtils_SwTimer_Start(&gl_TimerCtx, (void *)&gl_PdStackPort0Ctx, (cy_timer_id_t)BUTTON_PRESS_DEBOUNCE_TIMER_ID,
+                    BUTTON_PRESS_DEBOUNCE_TIMER_PERIOD, user_button_press_timer_cb);
         }
 
         /* Clear the P2.0 interrupt */
@@ -273,7 +273,7 @@ void gpio_interrupt_handler(void)
     }
 
 }
-#endif /* ENABLE_POWER_BUTTON */
+#endif /* ENABLE_USER_BUTTON */
 
 
 #if ENABLE_DPS310_I2C_INTERFACE
@@ -304,7 +304,7 @@ void init_sensor_timer_module (void)
     result = Cy_TCPWM_Counter_Init(CYBSP_TIMER_HW, CYBSP_TIMER_NUM, &CYBSP_TIMER_config);
     if(result != CY_TCPWM_SUCCESS)
     {
-        CY_ASSERT(0);
+        CY_ASSERT(CY_ASSERT_FAILED);
     }
 
     Cy_TCPWM_Counter_Enable(CYBSP_TIMER_HW, CYBSP_TIMER_NUM);
@@ -336,31 +336,46 @@ void deinit_sensor_timer_module(void)
 
 #endif /* ENABLE_DPS310_I2C_INTERFACE */
 
-
 int main(void)
 {
     cy_rslt_t result;
-
-#if DEBUG_UART_ENABLE
-    cy_stc_scb_uart_context_t CYBSP_UART_context;
-#endif
+    cy_en_sysint_status_t intr_result;
+    cy_stc_pdutils_timer_config_t timerConfig;
+    cy_en_usbpd_status_t usbpd_result;
 
     /* Initialize the device and board peripherals */
     result = cybsp_init() ;
     if (result != CY_RSLT_SUCCESS)
     {
-        CY_ASSERT(0);
+        CY_ASSERT(CY_ASSERT_FAILED);
     }
+
+#if DEBUG_PRINT
+
+     /* Configure and enable the UART peripheral */
+     Cy_SCB_UART_Init(CYBSP_UART_HW, &CYBSP_UART_config, &CYBSP_UART_context);
+     Cy_SCB_UART_Enable(CYBSP_UART_HW);
+
+#endif
+
 
     /*
      * Register the interrupt handler for the watchdog timer. This timer is used to
      * implement the soft timers required by the USB-PD Stack.
      */
-    Cy_SysInt_Init(&wdt_interrupt_config, &wdt_interrupt_handler);
+    intr_result = Cy_SysInt_Init(&wdt_interrupt_config, &wdt_interrupt_handler);
+    if (intr_result != CY_SYSINT_SUCCESS)
+    {   
+        CY_ASSERT(CY_ASSERT_FAILED);
+    }
+
     NVIC_EnableIRQ(wdt_interrupt_config.intrSrc);
 
+    timerConfig.sys_clk_freq = Cy_SysClk_ClkSysGetFrequency();
+    timerConfig.hw_timer_ctx = NULL;
+
     /* Initialize the soft timer module. */
-    cy_sw_timer_init(&gl_TimerCtx, Cy_SysClk_ClkSysGetFrequency());
+    Cy_PdUtils_SwTimer_Init(&gl_TimerCtx, &timerConfig);
 
 #if ENABLE_DPS310_I2C_INTERFACE
     /* Enable TCPWM interrupt */
@@ -369,52 +384,40 @@ int main(void)
        /*.intrSrc =*/ CYBSP_TIMER_IRQ, /* Interrupt source is Timer interrupt */
        /*.intrPriority =*/ 3UL   /* Interrupt priority is 3 */
     };
-    result = Cy_SysInt_Init(&intrCfg, timer_interrupt_handler);
-
-    if(result != CY_SYSINT_SUCCESS)
-    {
-        CY_ASSERT(0);
+    intr_result = Cy_SysInt_Init(&intrCfg, timer_interrupt_handler);
+    if (intr_result != CY_SYSINT_SUCCESS)
+    {   
+        CY_ASSERT(CY_ASSERT_FAILED);
     }
     /* Enable Timer Interrupt */
     NVIC_EnableIRQ(intrCfg.intrSrc);
 #endif /* ENABLE_DPS310_I2C_INTERFACE */
 
-#if ENABLE_POWER_BUTTON
+#if ENABLE_USER_BUTTON
     /* Enable GPIO interrupt */
     cy_stc_sysint_t gpioIntrCfg =
     {
        /*.intrSrc =*/ CYBSP_USER_BTN_IRQ, /* Interrupt source is USer Button GPIO interrupt */
        /*.intrPriority =*/ 3UL   /* Interrupt priority is 3 */
     };
-    result = Cy_SysInt_Init(&gpioIntrCfg, gpio_interrupt_handler);
-
-    if(result != CY_SYSINT_SUCCESS)
+    intr_result = Cy_SysInt_Init(&gpioIntrCfg, gpio_interrupt_handler);
+    if (intr_result != CY_SYSINT_SUCCESS)
     {
-        CY_ASSERT(0);
+        CY_ASSERT(CY_ASSERT_FAILED);
     }
 
     /* Enable GPIO Interrupt */
     NVIC_EnableIRQ(gpioIntrCfg.intrSrc);
 
-#endif /* ENABLE_POWER_BUTTON */
-
-#if DEBUG_UART_ENABLE
-    Cy_SCB_UART_Init(CYBSP_UART_HW, &CYBSP_UART_config, &CYBSP_UART_context);
-    /* Enable UART SCB */
-    Cy_SCB_UART_Enable(CYBSP_UART_HW);
-#endif
+#endif /* ENABLE_USER_BUTTON */
 
 #if ENABLE_DPS310_I2C_INTERFACE
-     /* Initialize I2C master SCB */
-        InitI2CMaster();
+    /* Initialize I2C master SCB */
+    InitI2CMaster();
 #endif /* ENABLE_DPS310_I2C_INTERFACE */
+
     /* Enable global interrupts */
     __enable_irq();
-
-#if ENABLE_POWER_BUTTON
-    Cy_GPIO_SetDrivemode(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_PIN, CY_GPIO_DM_PULLUP);
-    Cy_GPIO_SetInterruptEdge(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_PIN, CY_GPIO_INTR_BOTH);
-#endif /* ENABLE_POWER_BUTTON */
 
     /* Initialize the instrumentation related data structures. */
     instrumentation_init();
@@ -423,20 +426,32 @@ int main(void)
     instrumentation_register_cb((instrumentation_cb_t)instrumentation_cb);
 
     /* Configure and enable the USBPD interrupts */
-    Cy_SysInt_Init(&usbpd_port0_intr0_config, &cy_usbpd0_intr0_handler);
+    intr_result = Cy_SysInt_Init(&usbpd_port0_intr0_config, &cy_usbpd0_intr0_handler);
+    if (intr_result != CY_SYSINT_SUCCESS)
+    {
+        CY_ASSERT(CY_ASSERT_FAILED);
+    }
     NVIC_EnableIRQ(usbpd_port0_intr0_config.intrSrc);
 
-    Cy_SysInt_Init(&usbpd_port0_intr1_config, &cy_usbpd0_intr1_handler);
+    intr_result = Cy_SysInt_Init(&usbpd_port0_intr1_config, &cy_usbpd0_intr1_handler);
+    if (intr_result != CY_SYSINT_SUCCESS)
+    {
+        CY_ASSERT(CY_ASSERT_FAILED);
+    }
     NVIC_EnableIRQ(usbpd_port0_intr1_config.intrSrc);
 
     /* Initialize the USBPD driver */
 #if defined(CY_DEVICE_CCG3)
-    Cy_USBPD_Init(&gl_UsbPdPort0Ctx, 0, mtb_usbpd_port0_HW, NULL,
+    usbpd_result = Cy_USBPD_Init(&gl_UsbPdPort0Ctx, 0, mtb_usbpd_port0_HW, NULL,
             (cy_stc_usbpd_config_t *)&mtb_usbpd_port0_config, get_dpm_connect_stat);
 #else
-    Cy_USBPD_Init(&gl_UsbPdPort0Ctx, 0, mtb_usbpd_port0_HW, mtb_usbpd_port0_HW_TRIM,
+    usbpd_result = Cy_USBPD_Init(&gl_UsbPdPort0Ctx, 0, mtb_usbpd_port0_HW, mtb_usbpd_port0_HW_TRIM,
             (cy_stc_usbpd_config_t *)&mtb_usbpd_port0_config, get_dpm_connect_stat);
 #endif
+    if (usbpd_result != CY_USBPD_STAT_SUCCESS)
+    {
+        CY_ASSERT(CY_ASSERT_FAILED);
+    }
 
     /* Initialize the Device Policy Manager. */
     Cy_PdStack_Dpm_Init(&gl_PdStackPort0Ctx,
@@ -457,18 +472,6 @@ int main(void)
 
     /* Start the device policy manager operation. This will initialize the USB-PD block and enable connect detection. */
     Cy_PdStack_Dpm_Start(&gl_PdStackPort0Ctx);
-    
-     /* Configure LED pin as a strong drive output */
-    cyhal_gpio_init(CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, false);
-
-#if ENABLE_DPS310_I2C_INTERFACE &&  PMG1_S0
-    /* The PMG1 S0 kit doesnt have PUll on the I2C  lines used for this project.
-     * So using internal pull up for I2C lines. S1 , S2 and S3 kit have external
-     *  pull on the I2C lines used in device configurator.
-     */
-    Cy_GPIO_SetDrivemode(CYBSP_I2C_SCL_PORT,CYBSP_I2C_SCL_PORT_NUM, CY_GPIO_DM_PULLUP);
-    Cy_GPIO_SetDrivemode(CYBSP_I2C_SDA_PORT,CYBSP_I2C_SDA_PORT_NUM, CY_GPIO_DM_PULLUP);
-#endif /* ENABLE_DPS310_I2C_INTERFACE */
 
      /*
      * After the initialization is complete, keep processing the
@@ -493,17 +496,17 @@ int main(void)
             if(isDps310InitComplete() == 0u)
             {
                 is_dps310_initialized = true;
-#if DEBUG_UART_ENABLE
+#if DEBUG_PRINT
               /* Print Debug messages over UART */
-               print_my_debug_messages("\n\r DPS310 Sensor Init Complete \0" );
+                Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r DPS310 Sensor Init Complete \0" );
 #endif
             }
             else
             {
                 is_dps310_initialized = false;
-#if DEBUG_UART_ENABLE
+#if DEBUG_PRINT
                 /* Print Debug messages over UART */
-                print_my_debug_messages("\n\r DPS310 Sensor Init Failed \0");
+                Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r DPS310 Sensor Init Failed \0");
 #endif
             }
         }
@@ -530,9 +533,9 @@ int main(void)
                 Cy_GPIO_Write(CYBSP_USER_LED_PORT, CYBSP_USER_LED_NUM, 0x00);
                 sink_fet_on(&gl_PdStackPort0Ctx);
 
-#if DEBUG_UART_ENABLE
+#if DEBUG_PRINT
                 /* Print Debug messages over UART */
-                print_my_debug_messages("\n\r System State : ON\0");
+                Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r System State : ON\0");
 #endif
 
 #if ENABLE_DPS310_I2C_INTERFACE
@@ -546,9 +549,11 @@ int main(void)
                 Cy_GPIO_Write(CYBSP_USER_LED_PORT, CYBSP_USER_LED_NUM, 0x01);
                 sink_fet_off(&gl_PdStackPort0Ctx);
 
-#if DEBUG_UART_ENABLE
-                 /* Print Debug messages over UART */
-                print_my_debug_messages("\n\r System State : OFF\0");
+#if DEBUG_PRINT
+                /* Print Debug messages over UART */
+                Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r System State : OFF\0");
+                /*Delays for 50 milliseconds is applied to make above debug print to display before entering deep sleep.*/
+                Cy_SysLib_Delay(50);
 #endif
 
 #if ENABLE_DPS310_I2C_INTERFACE
@@ -562,7 +567,6 @@ int main(void)
 
         /* Perform tasks associated with instrumentation. */
         instrumentation_task();
-
 
 #if SYS_DEEPSLEEP_ENABLE
         /* If possible, enter deep sleep mode for power saving. */

@@ -2,12 +2,12 @@
 * File Name: config.h
 *
 * Description: This header file defines the application configuration for the PMG1
-*              MCU USBPD Sink with DPS310 I2C Sensor Code Example for ModusToolBox.
+*              MCU USBPD Sink Example for ModusToolBox.
 *
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -42,7 +42,7 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
-#include <cybsp.h>
+#include "cybsp.h"
 
 /* Restrict PD stack to sink operation. */
 #ifndef CY_PD_SINK_ONLY
@@ -84,12 +84,6 @@
 /* Period in ms for turning off VBus FET. */
 #define APP_VBUS_FET_OFF_TIMER_PERIOD           (1u)
 
-/** 100: Timer used for providing delay for VBUS FET ON. */
-#define APP_VBUS_FET_ON_TIMER                   (100u)
-
-/** 101: Timer used for providing delay for VBUS FET OFF. */
-#define APP_VBUS_FET_OFF_TIMER                  (101u)
-
 /*
  * The Analog-MUX bus input which is used to measure VBus voltage. Choose AMUXBUS_A on PMG1-S2 and AMUXBUS_B on
  * other devices.
@@ -99,9 +93,6 @@
 #else
 #define APP_VBUS_POLL_ADC_INPUT                 (CY_USBPD_ADC_INPUT_AMUX_B)
 #endif /* defined(CY_DEVICE_CCG3) */
-
-/* Enable legacy charger detect capability so that we can identify whether a DCP/CDP is getting connected. */
-#define  BATTERY_CHARGING_ENABLE                (1u)
 
 /*
  * Enable/Disable delay between fault retries for Type-C/PD faults.
@@ -174,7 +165,7 @@
  * Activity indicator LED timer. The timer is used to indicate that the firmware
  * is functional. The feature is controlled by APP_FW_LED_ENABLE.
  */
-#define LED_TIMER_ID                            (0xC0u)
+#define LED_TIMER_ID                            (CY_PDUTILS_TIMER_USER_START_ID)
 
 /*
  * The LED toggle period (ms) to be used when Type-C connection hasn't been detected.
@@ -218,19 +209,12 @@
 #define ENABLE_GPIO_INT_SECTION                 (1u)
 
 #if ENABLE_GPIO_INT_SECTION
-#define ENABLE_POWER_BUTTON                     (1u)
+#define ENABLE_USER_BUTTON                     (1u)
 #endif /* ENABLE_GPIO_INT_SECTION */
 
-/*
- * Enable/Disable firmware that allows to print Debug messages via SCB Configured as UART
- * The Debug UART Baud Rate is set to 115200, Data width is 8 bits, Parity is None & Stop bit is 1
- */
-#define DEBUG_UART_ENABLE                       (1u)
-
-#if DEBUG_UART_ENABLE
+#if DEBUG_PRINT
 void NumToString(int n, char *buffer);
 void FloatToString(float n, char *buffer);
-void print_my_debug_messages(char *str);
 #endif
 /*
  * Enable/Disable firmware required to support DPS310 Temperature & Pressure Sensor Interface

@@ -9,7 +9,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -48,10 +48,10 @@
  * Header files including
  ******************************************************************************/
 
-#include <config.h>
-#include <cy_usbpd_common.h>
-#include <cy_usbpd_bch.h>
-#include <cy_pdstack_common.h>
+#include "config.h"
+#include "cy_usbpd_common.h"
+#include "cy_usbpd_bch.h"
+#include "cy_pdstack_common.h"
 
 /*******************************************************************************
  * MACRO Definition

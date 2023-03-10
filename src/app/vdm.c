@@ -7,8 +7,8 @@
 *
 * Related Document: See README.md
 *
-********************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+*******************************************************************************
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -40,12 +40,12 @@
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
-#include <config.h>
-#include <cy_pdstack_common.h>
-#include <cy_pdstack_utils.h>
-#include <cy_sw_timer.h>
-#include <vdm.h>
-#include <app.h>
+#include "config.h"
+#include "cy_pdstack_common.h"
+#include "cy_pdutils.h"
+#include "cy_pdutils_sw_timer.h"
+#include "vdm.h"
+#include "app.h"
 
 /* Stores Discover ID response VDO count */
 static uint8_t  gl_vdm_id_vdo_cnt[NO_OF_TYPEC_PORTS];
@@ -142,7 +142,7 @@ void eval_vdm(cy_stc_pdstack_context_t * context, const cy_stc_pdstack_pd_packet
 
 #if CY_PD_REV3_ENABLE
         /* Use the minimum VDM version from among the partner's revision and the live revision. */
-        app_stat->vdm_version = GET_MIN (app_stat->vdm_version, vdm->dat[CY_PD_VDM_HEADER_IDX].std_vdm_hdr.stVer);
+        app_stat->vdm_version = CY_PDUTILS_GET_MIN (app_stat->vdm_version, vdm->dat[CY_PD_VDM_HEADER_IDX].std_vdm_hdr.stVer);
 #endif /* CY_PD_REV3_ENABLE */
 
         /* Set a NAK response by default. */

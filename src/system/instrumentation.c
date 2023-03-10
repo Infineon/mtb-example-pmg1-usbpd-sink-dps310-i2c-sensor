@@ -8,7 +8,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -43,8 +43,8 @@
 #include "config.h"
 #include "instrumentation.h"
 #include "cy_pdl.h"
-#include "cy_sw_timer.h"
-#include <cy_pdstack_common.h>
+#include "cy_pdutils_sw_timer.h"
+#include "cy_pdstack_common.h"
 #include <stddef.h>
 
 /* Run-time stack lower limit defined in linker script. */
@@ -119,7 +119,7 @@ void watchdog_timer_cb (
     }
 
     /* Start the timer again. */
-    cy_sw_timer_start (gl_PdStackPort0Ctx.ptrTimerContext, NULL, WATCHDOG_TIMER_ID,
+    Cy_PdUtils_SwTimer_Start (gl_PdStackPort0Ctx.ptrTimerContext, NULL, CY_PDUTILS_WATCHDOG_TIMER,
             WATCHDOG_RESET_PERIOD_MS, watchdog_timer_cb);
 }
 
@@ -199,7 +199,7 @@ void instrumentation_start(void)
 {
 #if RESET_ON_ERROR_ENABLE
     /* Start the timer used for watchdog reset. */
-    cy_sw_timer_start (gl_PdStackPort0Ctx.ptrTimerContext, NULL,  WATCHDOG_TIMER_ID,
+    Cy_PdUtils_SwTimer_Start (gl_PdStackPort0Ctx.ptrTimerContext, NULL, CY_PDUTILS_WATCHDOG_TIMER,
             WATCHDOG_RESET_PERIOD_MS, watchdog_timer_cb);
 #endif /* RESET_ON_ERROR_ENABLE */
 
@@ -207,7 +207,7 @@ void instrumentation_start(void)
     /*
      * Enable WDT hardware reset.
      * WDT interrupt flag is expected to be cleared by software timer module
-     * (At the least WATCHDOG_TIMER_ID is active always).
+     * (At the least CY_PDUTILS_WATCHDOG_TIMER is active always).
      * If WDT interrupt handler is not executed because of CPU lock up and
      * the WDT interrupt flag is not cleared for the three consecutive
      * interrupts, a hardware reset is triggered for the recovery.
@@ -237,7 +237,7 @@ void instrumentation_task(void)
     }
 
     /* Calculate the minimum stack availability margin and update debug register. */
-    gMinStackMargin = GET_MIN(gMinStackMargin, ((uint32_t)addr_p - (uint32_t)gStackBottom));
+    gMinStackMargin = CY_PDUTILS_GET_MIN(gMinStackMargin, ((uint32_t)addr_p - (uint32_t)gStackBottom));
 #endif /* STACK_USAGE_CHECK_ENABLE */
 }
 

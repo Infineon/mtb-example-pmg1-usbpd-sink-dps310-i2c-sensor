@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -106,6 +106,9 @@
 #define DPS__FAIL_INIT_FAILED -2
 #define DPS__FAIL_TOOBUSY -3
 #define DPS__FAIL_UNFINISHED -4
+
+/* Debug print macro to enable UART print */
+#define DEBUG_PRINT    (1u)
 
 /*******************************************************************************
 * Global variables

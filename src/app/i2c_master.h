@@ -8,7 +8,7 @@
 * Related Document: See Readme.md
 *
 ********************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -74,8 +74,6 @@ typedef struct
 
 void ReadTemperatureSensor(void);
 uint32_t InitI2CMaster(void);
-
-extern cyhal_uart_t uartObj;
 
 extern bool is_sensor_rdy_to_init ;
 extern bool is_dps310_initialized;

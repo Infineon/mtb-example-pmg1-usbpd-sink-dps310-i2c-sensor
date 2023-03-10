@@ -7,8 +7,8 @@
 *
 * Related Document: See README.md
 *
-********************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+*******************************************************************************
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -40,9 +40,9 @@
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
-#include <config.h>
-#include <swap.h>
-#include <app.h>
+#include "config.h"
+#include "swap.h"
+#include "app.h"
 
 #define APP_PD_SWAP_RESP_ACCEPT         (0u)
 #define APP_PD_SWAP_RESP_REJECT         (1u)
@@ -114,7 +114,7 @@ void eval_pr_swap (cy_stc_pdstack_context_t * context, cy_pdstack_app_resp_cbk_t
     cy_en_pdstack_app_req_status_t result = CY_PDSTACK_REQ_REJECT;
 
 #if ((!CY_PD_SINK_ONLY) && (!CY_PD_SOURCE_ONLY))
-    const dpm_status_t* dpm = dpm_get_info(port);
+    const dpm_status_t* dpm = dpm_get_info(context->port);
     uint8_t pdo_mask;
 
     if(dpm->curPortRole == PRT_ROLE_SOURCE)
@@ -145,11 +145,11 @@ void eval_pr_swap (cy_stc_pdstack_context_t * context, cy_pdstack_app_resp_cbk_t
             (
              ((pdo_mask & (0x1 << PD_EXTERNALLY_POWERED_BIT_POS)) == 0) ||
              (dpm->curPortRole == PRT_ROLE_SINK) ||
-             (PD_GET_PTR_HOST_CFG_TBL(port)->ext_powered_prs != 0)
+             (PD_GET_PTR_HOST_CFG_TBL(context->port)->ext_powered_prs != 0)
             )
        )
     {
-        result = get_response(port, pr_swap_response);
+        result = get_response(context->port, pr_swap_response);
     }
 
 #else /* (CY_PD_SINK_ONLY || CY_PD_SOURCE_ONLY) */
@@ -187,7 +187,7 @@ void eval_vconn_swap (cy_stc_pdstack_context_t * context, cy_pdstack_app_resp_cb
         {
 #if VCONN_OCP_ENABLE
             /* Do not allow VCONN_SWAP to become VConn source if fault is active. */
-            if ((app_get_status(port)->fault_status & APP_PORT_VCONN_FAULT_ACTIVE) != 0)
+            if ((app_get_status(context->port)->fault_status & APP_PORT_VCONN_FAULT_ACTIVE) != 0)
             {
                 result = CY_PDSTACK_REQ_REJECT;
             }
@@ -208,8 +208,8 @@ void eval_fr_swap (cy_stc_pdstack_context_t context, cy_pdstack_app_resp_cbk_t a
     /* Always accept, FRS message will only be received if we have previously initiated a FRS signal. */
     app_req_status_t result = CY_PDSTACK_REQ_ACCEPT;
 
-    app_get_resp_buf(context)->reqStatus = result;
-    app_resp_handler(context, app_get_resp_buf(context));
+    app_get_resp_buf(context->port)->reqStatus = result;
+    app_resp_handler(context, app_get_resp_buf(context->port));
 
 }
 

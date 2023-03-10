@@ -9,7 +9,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -49,10 +49,10 @@
  ******************************************************************************/
 
 #include <stdint.h>
-#include <config.h>
-#include <cy_usbpd_vbus_ctrl.h>
-#include <cy_usbpd_typec.h>
-#include <cy_pdstack_dpm.h>
+#include "config.h"
+#include "cy_usbpd_vbus_ctrl.h"
+#include "cy_usbpd_typec.h"
+#include "cy_pdstack_dpm.h"
 
 /*******************************************************************************
  * MACRO Definition
@@ -269,7 +269,7 @@ bool vconn_is_present(cy_stc_pdstack_context_t *ptrPdStackContext);
  *
  * @return true if power is present on VBus, else returns false
  */
-bool vbus_is_present(cy_stc_pdstack_context_t *ptrPdStackContext, uint16_t volt, int8 per);
+bool vbus_is_present(cy_stc_pdstack_context_t *ptrPdStackContext, uint16_t volt, int8_t per);
 
 /**
  * @brief This function return current VBUS voltage in mV
@@ -417,16 +417,19 @@ void app_conf_for_faulty_dev_removal(cy_stc_pdstack_context_t * ptrPdStackcontex
 bool app_port_fault_count_exceeded(cy_stc_pdstack_context_t * ptrPdStackcontext);
 
 
-#if ENABLE_POWER_BUTTON
+#if ENABLE_USER_BUTTON
 #define SYSTEM_PWR_STATE_OFF                    (0u)
 #define SYSTEM_PWR_STATE_ON                     (1u)
+
+/* Debug print macro to enable UART print */
+#define DEBUG_PRINT    (1u)
 
 extern volatile bool sys_pwr_state;
 extern cy_stc_pdstack_context_t *my_curr_pdstack_context;
 void sink_fet_on(cy_stc_pdstack_context_t * context);
 void sink_fet_off(cy_stc_pdstack_context_t * context);
 
-#endif /* ENABLE_POWER_BUTTON */
+#endif /* ENABLE_USER_BUTTON */
 
 #endif /* _APP_H_ */
 

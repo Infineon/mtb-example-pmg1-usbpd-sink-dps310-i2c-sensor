@@ -7,8 +7,8 @@
 *
 * Related Document: See README.md
 *
-********************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+*******************************************************************************
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -47,7 +47,7 @@
  * Header files including
  ******************************************************************************/
 
-#include <cy_pdstack_common.h>
+#include "cy_pdstack_common.h"
 
 /* Data object index of the ID Header field in the Discover Identity response. */
 #define ID_HEADER_DO_INDEX                      (1u)

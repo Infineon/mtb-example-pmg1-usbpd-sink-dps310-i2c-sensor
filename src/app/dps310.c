@@ -8,7 +8,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -43,7 +43,6 @@
 /* Header file includes */
 #include "dps310.h"
 #include "config.h"
-#include "cyhal_uart.h"
 
 #if ENABLE_DPS310_I2C_INTERFACE
 /*******************************************************************************
@@ -412,7 +411,9 @@ void dps310_read_data (void)
 {
     float temperature;
     float pressure;
+#if DEBUG_PRINT
     char str[10];
+#endif
     static uint16_t temp_err_cnt =0, prs_err_cnt =0;
 
     if(Dps310getSingleResult(&temperature, CMD_TEMP) < DPS__SUCCEEDED )
@@ -420,18 +421,20 @@ void dps310_read_data (void)
         temp_err_cnt++;
         if(temp_err_cnt > 3)
         {
+#if DEBUG_PRINT
             /* Print error message only if the I2C read fails more than 3 times */
             Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r I2C Connection Failed \0");
+#endif
             temp_err_cnt = 0;
         }
         return;
     }
-#if DEBUG_UART_ENABLE
+#if DEBUG_PRINT
     /* Print the temperature value over UART */
-    print_my_debug_messages("\n\r Temperature: ");
+    Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r Temperature: ");
     FloatToString(temperature, str);
-    print_my_debug_messages(str);
-    print_my_debug_messages(" C \0");
+    Cy_SCB_UART_PutString(CYBSP_UART_HW, str);
+    Cy_SCB_UART_PutString(CYBSP_UART_HW, " C \0");
 #endif
 
     if(Dps310getSingleResult(&pressure, CMD_PRS) < DPS__SUCCEEDED )
@@ -439,18 +442,20 @@ void dps310_read_data (void)
         prs_err_cnt++;
         if(prs_err_cnt >3)
         {
+#if DEBUG_PRINT
             /* Print error message only if the I2C read fails more than 3 times */
             Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r I2C connection Failed \0");
+#endif
             prs_err_cnt = 0;
         }
         return;
     }
-#if DEBUG_UART_ENABLE
+#if DEBUG_PRINT
      /* Print the Pressure value over UART */
-    print_my_debug_messages("\n\r Pressure: ");
+    Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r Pressure: ");
     FloatToString(pressure, str);
-    print_my_debug_messages(str);
-    print_my_debug_messages(" hPa \0");
+    Cy_SCB_UART_PutString(CYBSP_UART_HW, str);
+    Cy_SCB_UART_PutString(CYBSP_UART_HW, " hPa \0");
 #endif
 }
 

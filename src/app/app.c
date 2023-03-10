@@ -8,7 +8,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -40,18 +40,17 @@
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
-#include <cybsp.h>
-#include <cy_pdstack_common.h>
+#include "cybsp.h"
+#include "cy_pdstack_common.h"
 #include "cy_pdstack_dpm.h"
-#include <config.h>
-#include <psink.h>
-#include <swap.h>
-#include <vdm.h>
-#include <app.h>
-#include <cy_sw_timer.h>
-#include <cy_sw_timer_id.h>
-#include <cy_gpio.h>
-
+#include "config.h"
+#include "psink.h"
+#include "swap.h"
+#include "vdm.h"
+#include "app.h"
+#include "cy_pdutils_sw_timer.h"
+#include "timer_id.h"
+#include "cy_gpio.h"
 
 #if BATTERY_CHARGING_ENABLE
 #include <charger_detect.h>
@@ -76,8 +75,8 @@ static void app_cbl_dsc_callback (cy_stc_pdstack_context_t *ptrPdStackContext, c
     /* Keep repeating the DPM command until we succeed. */
     if (resp == CY_PDSTACK_SEQ_ABORTED)
     {
-        cy_sw_timer_start (ptrPdStackContext->ptrTimerContext, ptrPdStackContext,
-                CY_PDSTACK_GET_APP_TIMER_ID(ptrPdStackContext, APP_CBL_DISC_TRIGGER_TIMER),
+        Cy_PdUtils_SwTimer_Start (ptrPdStackContext->ptrTimerContext, ptrPdStackContext,
+                GET_APP_TIMER_ID(ptrPdStackContext, APP_CBL_DISC_TRIGGER_TIMER),
                 APP_CBL_DISC_TIMER_PERIOD, app_cbl_dsc_timer_cb);
     }
 }
@@ -171,11 +170,11 @@ bool app_extd_msg_handler(cy_stc_pdstack_context_t *ptrPdStackContext, cy_stc_pd
             )
        )
     {
-        cy_sw_timer_start(ptrPdStackContext->timerContext, ptrPdStackContext,
-                          CY_PDSTACK_GET_APP_TIMER_ID(ptrPdStackContext, APP_CHUNKED_MSG_RESP_TIMER), 45, app_send_not_supported_cb);
+        Cy_PdUtils_SwTimer_Start(ptrPdStackContext->timerContext, ptrPdStackContext,
+                          GET_APP_TIMER_ID(ptrPdStackContext, APP_CHUNKED_MSG_RESP_TIMER), 45, app_send_not_supported_cb);
 
         /* Stop the PD_GENERIC_TIMER to prevent premature return to ready state. */
-        cy_sw_timer_stop(ptrPdStackContext->timerContext, CY_PDSTACK_GET_PD_TIMER_ID(ptrPdStackContext, PD_GENERIC_TIMER));
+        Cy_PdUtils_SwTimer_Stop(ptrPdStackContext->timerContext, CY_PDSTACK_GET_PD_TIMER_ID(ptrPdStackContext, PD_GENERIC_TIMER));
     }
     else
     {
@@ -206,7 +205,7 @@ bool app_extd_msg_handler(cy_stc_pdstack_context_t *ptrPdStackContext, cy_stc_pd
         extd_dpm_buf.extdHdr.extd.request  = true;
         extd_dpm_buf.extdHdr.extd.chunkNum = pd_pkt_p->hdr.hdr.chunkNum + 1;
         extd_dpm_buf.datPtr                = (uint8_t*)&gl_extd_dummy_data;
-        extd_dpm_buf.timeout                = CY_PD_SENDER_RESPONSE_TIMER_PERIOD;
+        extd_dpm_buf.timeout                = ptrPdStackContext->senderRspTimeout;
 
         /* Send next chunk request */
         Cy_PdStack_Dpm_SendPdCommand(ptrPdStackContext,CY_PDSTACK_DPM_CMD_SEND_EXTENDED,
@@ -233,29 +232,13 @@ bool app_extd_msg_handler(cy_stc_pdstack_context_t *ptrPdStackContext, cy_stc_pd
 
 static uint8_t gl_app_previous_polarity[NO_OF_TYPEC_PORTS];
 
-#if DEBUG_UART_ENABLE
+#if DEBUG_PRINT
 /* This section of code handle printing of Debug message Strings */
-void print_my_debug_messages(char str[])
-{
-    int str_cnt = 0;
-    int tx_wait_count = 10;
-    while(str[str_cnt] != ((char_t) 0))
-    {
-        while(0UL == Cy_SCB_UART_Put(CYBSP_UART_HW, (uint32_t)str[str_cnt]));
-        str_cnt++;
-    }
-    while((0UL == Cy_SCB_UART_IsTxComplete(CYBSP_UART_HW)) && (tx_wait_count > 0))
-    {
-        Cy_SysLib_DelayUs(1000);
-        tx_wait_count--;
-    }
-    Cy_SCB_UART_ClearTxFifo(CYBSP_UART_HW);
-}
 
 /* Function to Converts an integer to string */
 void NumToString(int n, char *buffer)  
 {
-    uint8 i = 0, j =0;
+    uint8_t i = 0, j =0;
     char temp[10];
 
     while(n!=0)
@@ -273,7 +256,7 @@ void NumToString(int n, char *buffer)
 /* Function to Converts an Floating point data to string */
 void FloatToString(float data, char *buffer)  // Character conversion function
 {
-    uint8 i = 0, j =0;
+    uint8_t i = 0, j =0;
     uint32_t n= (uint32_t)(data * 100);
     char temp[10];
 
@@ -306,30 +289,30 @@ void print_app_events(cy_stc_pdstack_context_t *ptrPdStackContext,
     switch(evt)
     {
         case APP_EVT_TYPEC_STARTED:
-            print_my_debug_messages("\n\r TYPEC_STARTED \0");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r TYPEC_STARTED \0");
         break;
 
         case APP_EVT_CONNECT:
-            print_my_debug_messages("\n\r TYPEC_CONNECT \0");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r TYPEC_CONNECT \0");
         break;
 
         case APP_EVT_DISCONNECT:
-            print_my_debug_messages("\n\r TYPEC_DISCONNECT \0");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r TYPEC_DISCONNECT \0");
         break;
 
         case APP_EVT_PD_CONTRACT_NEGOTIATION_COMPLETE:
-            print_my_debug_messages("\n\r PD_CONTRACT_NEGOTIATION_COMPLETE \0");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r PD_CONTRACT_NEGOTIATION_COMPLETE \0");
             volt = app_get_status(port)->psnk_volt;
             current = (dpm_stat.contract.curPwr) * 10;
 
-            print_my_debug_messages("\n\r PD Contract_Volt = ");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r PD Contract_Volt = ");
             NumToString((int)volt , str);
-            print_my_debug_messages( str);
-            print_my_debug_messages(" mV \0");
-            print_my_debug_messages("\n\r PD Contract_Current = ");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, str);
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, " mV \0");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r PD Contract_Current = ");
             NumToString((int)current , str);
-            print_my_debug_messages(str);
-            print_my_debug_messages(" mA \0");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, str);
+            Cy_SCB_UART_PutString(CYBSP_UART_HW," mA \0");
         break;
 
         default:
@@ -337,7 +320,7 @@ void print_app_events(cy_stc_pdstack_context_t *ptrPdStackContext,
 
     }
 }
-#endif /* DEBUG_UART_ENABLE */
+#endif /* DEBUG_PRINT */
 
 #if ENABLE_DPS310_I2C_INTERFACE
 bool is_sensor_rdy_to_init = false;
@@ -420,8 +403,8 @@ void app_event_handler(cy_stc_pdstack_context_t *ptrPdStackContext,
                 if (!typec_only)
                 {
                     set_mux (ptrPdStackContext, MUX_CONFIG_ISOLATE, 0);
-                    cy_sw_timer_stop (ptrPdStackContext->ptrTimerContext,
-                            CY_PDSTACK_GET_APP_TIMER_ID(ptrPdStackContext, APP_AME_TIMEOUT_TIMER));
+                    Cy_PdUtils_SwTimer_Stop (ptrPdStackContext->ptrTimerContext,
+                            GET_APP_TIMER_ID(ptrPdStackContext, APP_AME_TIMEOUT_TIMER));
                 }
             }
 
@@ -534,9 +517,9 @@ void app_event_handler(cy_stc_pdstack_context_t *ptrPdStackContext,
             break;
     }
 
-#if DEBUG_UART_ENABLE
+#if DEBUG_PRINT
     print_app_events(ptrPdStackContext, evt);
-#endif /* DEBUG_UART_ENABLE */
+#endif /* DEBUG_PRINT */
 
     /* Pass the event notification to the fault handler module. */
     if (fault_event_handler (ptrPdStackContext, evt, dat))
@@ -628,7 +611,7 @@ bool system_sleep(cy_stc_pdstack_context_t *ptrPdStackContext, cy_stc_pdstack_co
 #endif /* PMG1_PD_DUALPORT_ENABLE */
            )
         {
-            cy_sw_timer_enter_sleep(ptrPdStackContext->ptrTimerContext);
+            Cy_PdUtils_SwTimer_EnterSleep(ptrPdStackContext->ptrTimerContext);
 
             Cy_USBPD_SetReference(ptrPdStackContext->ptrUsbPdContext, true);
 #if PMG1_PD_DUALPORT_ENABLE
@@ -710,7 +693,7 @@ bool vconn_is_present(cy_stc_pdstack_context_t *ptrPdStackContext)
 #include "cy_usbpd_pmg1s3_regs.h"
 #endif /* PSVP_FPGA_ENABLE */
 
-bool vbus_is_present(cy_stc_pdstack_context_t *ptrPdStackContext, uint16_t volt, int8 per)
+bool vbus_is_present(cy_stc_pdstack_context_t *ptrPdStackContext, uint16_t volt, int8_t per)
 {
 #if PSVP_FPGA_ENABLE
     PPDSS_REGS_T pd = ptrPdStackContext->ptrUsbPdContext->base;

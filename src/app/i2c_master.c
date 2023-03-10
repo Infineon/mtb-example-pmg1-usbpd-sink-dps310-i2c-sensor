@@ -8,7 +8,7 @@
 * Related Document: See Readme.md
 *
 ********************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -44,8 +44,7 @@
 #include "i2c_master.h"
 #include "stdio.h"
 #include "config.h"
-#include "cyhal_uart.h"
-#include "cy_sw_timer.h"
+#include "cy_pdutils_sw_timer.h"
 #include "cy_pdstack_common.h"
 
 #if ENABLE_DPS310_I2C_INTERFACE
@@ -59,7 +58,7 @@
 /* I2C transfer delay */
 #define CY_SCB_WAIT_DELAY  (100UL)
 
-extern cy_stc_sw_timer_t        gl_TimerCtx;
+extern cy_stc_pdutils_sw_timer_t gl_TimerCtx;
 extern cy_stc_pdstack_context_t gl_PdStackPort0Ctx;
 
  /* Timer used to ensure I2C transfers to the MPS complete on time. */
@@ -181,7 +180,7 @@ uint32_t DPS310_I2CRegRead (uint8_t regAddr, uint8_t *read_buffer , uint8_t coun
 
     /* Clear the timeout flag and start a timer. */
     i2c_xfer_timeout = false;
-    cy_sw_timer_start (&gl_TimerCtx, (void *)&gl_PdStackPort0Ctx, (cy_timer_id_t)SCB_I2C_TIMER_ID,
+    Cy_PdUtils_SwTimer_Start  (&gl_TimerCtx, (void *)&gl_PdStackPort0Ctx, (cy_timer_id_t)SCB_I2C_TIMER_ID,
             SCB_I2C_TIMER_PERIOD, i2c_xfer_timer_cb);
 
 
@@ -253,7 +252,7 @@ uint32_t DPS310_I2CRegWrite (uint8_t regAddr, uint8_t *write_buffer, uint8_t cou
 
     /* Clear the timeout flag and start a timer. */
     i2c_xfer_timeout = false;
-    cy_sw_timer_start (&gl_TimerCtx, (void *)&gl_PdStackPort0Ctx, (cy_timer_id_t)SCB_I2C_TIMER_ID,
+    Cy_PdUtils_SwTimer_Start  (&gl_TimerCtx, (void *)&gl_PdStackPort0Ctx, (cy_timer_id_t)SCB_I2C_TIMER_ID,
                 SCB_I2C_TIMER_PERIOD, i2c_xfer_timer_cb);
 
 
