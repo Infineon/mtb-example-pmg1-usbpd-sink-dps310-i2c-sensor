@@ -2,13 +2,13 @@
 * File Name: charger_detect.c
 *
 * Description: This source file implements the BC 1.2 (legacy) charger detect
-*              functions which are part of the PMG1 MCU USBPD Sink with DPS310
-*              I2C Sensor Code Example for ModusToolBox.
+*              functions which are part of the PMG1 MCU USBPD Sink PPS demo
+*              Example for ModusToolBox.
 *
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -41,22 +41,34 @@
 *******************************************************************************/
 
 #include "cybsp.h"
-#include "charger_detect.h"
+#include "cy_app_charger_detect.h"
 #include "cy_pdstack_common.h"
 #include "cy_pdstack_dpm.h"
 #include "cy_pdutils.h"
 #include "cy_usbpd_bch.h"
-#include "psink.h"
+#include "cy_app_sink.h"
 #include "cy_pdutils_sw_timer.h"
-#include "timer_id.h"
-#include "app.h"
+#include "cy_app_timer_id.h"
+#include "cy_app.h"
 
 #if (BATTERY_CHARGING_ENABLE)
 
 chgdet_status_t gl_chgdet_status[NO_OF_TYPEC_PORTS];
 
 #if (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD))
-
+/*******************************************************************************
+* Function Name: chgdet_timer_cb
+********************************************************************************
+* Summary:
+*   - Charger detect timer callback.
+*
+* Parameters:
+*  cbContext - callback context
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_timer_cb(cy_timer_id_t id, void *cbContext)
 {
     cy_stc_pdstack_context_t *stack_ctx = (cy_stc_pdstack_context_t *)cbContext;
@@ -66,17 +78,31 @@ static void chgdet_timer_cb(cy_timer_id_t id, void *cbContext)
         id = (id & 0x00FFU) + CY_PDUTILS_TIMER_APP_PORT0_START_ID;
     }
 
-    if (id == APP_BC_GENERIC_TIMER1)
+    if (id == CY_APP_BC_GENERIC_TIMER1)
     {
         chgdet_fsm_set_evt((cy_stc_pdstack_context_t *)cbContext, BC_EVT_TIMEOUT1);
     }
 
-    if (id == APP_BC_GENERIC_TIMER2)
+    if (id == CY_APP_BC_GENERIC_TIMER2)
     {
         chgdet_fsm_set_evt((cy_stc_pdstack_context_t *)cbContext, BC_EVT_TIMEOUT2);
     }
 }
 
+/*******************************************************************************
+* Function Name: chgdet_fsm_off
+********************************************************************************
+* Summary:
+*   - This state is for charger detect off.
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_fsm_off(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt)
 {
     /* Nothing to do in this state. */
@@ -84,6 +110,20 @@ static void chgdet_fsm_off(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t
     CY_UNUSED_PARAMETER(evt);
 }
 
+/*******************************************************************************
+* Function Name: chgdet_fsm_sink_start
+********************************************************************************
+* Summary:
+*   - This state is for start of charger detect.
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_fsm_sink_start(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt)
 {
     chgdet_status_t *chgdet_stat = &gl_chgdet_status[stack_ctx->port];
@@ -100,7 +140,20 @@ static void chgdet_fsm_sink_start(cy_stc_pdstack_context_t *stack_ctx, chgdet_fs
     }
 }
 
-/* This state is for primary charger detect. Refer BC 1.2 spec for details. */
+/*******************************************************************************
+* Function Name: chgdet_fsm_sink_primary_charger_detect
+********************************************************************************
+* Summary:
+*   - This state is for primary charger detect. Refer BC 1.2 spec for details
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_fsm_sink_primary_charger_detect(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt)
 {
     chgdet_status_t *chgdet_stat = &gl_chgdet_status[stack_ctx->port];
@@ -111,8 +164,8 @@ static void chgdet_fsm_sink_primary_charger_detect(cy_stc_pdstack_context_t *sta
             /* Apply terminations on D+/- and start VDP_DM_SRC_ON timer to schedule the next step. */
             Cy_USBPD_Bch_Phy_ConfigSnkTerm (stack_ctx->ptrUsbPdContext, CHGB_SINK_TERM_PCD);
             Cy_PdUtils_SwTimer_Start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
-                    GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
-                    APP_BC_VDP_DM_SRC_ON_PERIOD, chgdet_timer_cb);
+                    CY_APP_GET_TIMER_ID(stack_ctx, CY_APP_BC_GENERIC_TIMER1),
+                     CY_APP_BC_VDP_DM_SRC_ON_PERIOD, chgdet_timer_cb);
             break;
 
         case CHGDET_FSM_EVT_TIMEOUT1:
@@ -122,8 +175,8 @@ static void chgdet_fsm_sink_primary_charger_detect(cy_stc_pdstack_context_t *sta
             {
                 /* Start timer for source to differentiate between primary and secondary detection */
                 Cy_PdUtils_SwTimer_Start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
-                        GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER2),
-                        APP_BC_VDMSRC_EN_DIS_PERIOD, chgdet_timer_cb);
+                        CY_APP_GET_TIMER_ID(stack_ctx, CY_APP_BC_GENERIC_TIMER2),
+                        CY_APP_BC_VDMSRC_EN_DIS_PERIOD, chgdet_timer_cb);
             }
             else
             {
@@ -147,6 +200,20 @@ static void chgdet_fsm_sink_primary_charger_detect(cy_stc_pdstack_context_t *sta
     }
 }
 
+/*******************************************************************************
+* Function Name: chgdet_fsm_sink_type_c_only_source_connected
+********************************************************************************
+* Summary:
+*   - This state is used to check source connected or not
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_fsm_sink_type_c_only_source_connected(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt)
 {
     if (evt == CHGDET_FSM_EVT_ENTRY)
@@ -160,7 +227,21 @@ static void chgdet_fsm_sink_type_c_only_source_connected(cy_stc_pdstack_context_
     }
 }
 
-/* This state is used to perform secondary charger detect. Refer BC 1.2 spec for details. */
+/*******************************************************************************
+* Function Name: chgdet_fsm_sink_secondary_charger_detect
+********************************************************************************
+* Summary:
+*   - This state is used to perform secondary charger detect. Refer BC 1.2 spec
+*      for details
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_fsm_sink_secondary_charger_detect(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt)
 {
     chgdet_status_t *chgdet_stat = &gl_chgdet_status[stack_ctx->port];
@@ -173,8 +254,8 @@ static void chgdet_fsm_sink_secondary_charger_detect(cy_stc_pdstack_context_t *s
 
             /* Start timer to apply VDM_SRC for TVDM_SRC_ON */
             Cy_PdUtils_SwTimer_Start(stack_ctx->ptrTimerContext, (void *)stack_ctx,
-                    GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
-                    APP_BC_VDP_DM_SRC_ON_PERIOD, chgdet_timer_cb);
+                    CY_APP_GET_TIMER_ID(stack_ctx, CY_APP_BC_GENERIC_TIMER1),
+                    CY_APP_BC_VDP_DM_SRC_ON_PERIOD, chgdet_timer_cb);
             break;
 
         case CHGDET_FSM_EVT_TIMEOUT1:
@@ -202,7 +283,20 @@ static void chgdet_fsm_sink_secondary_charger_detect(cy_stc_pdstack_context_t *s
     }
 }
 
-/* The Type-C source is a Downstream Charging Port (DCP). */
+/*******************************************************************************
+* Function Name: chgdet_fsm_sink_dcp_connected
+********************************************************************************
+* Summary:
+*   - The Type-C source is a Downstream Charging Port (DCP)
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_fsm_sink_dcp_connected(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt)
 {
     if (evt == CHGDET_FSM_EVT_ENTRY)
@@ -214,12 +308,25 @@ static void chgdet_fsm_sink_dcp_connected(cy_stc_pdstack_context_t *stack_ctx, c
 #endif /* defined(CY_DEVICE_CCG6) */
 
         /* Set current limit to 1.5A (DCP) and enable Sink FET if not already turned ON. */
-        psnk_set_current(stack_ctx, CY_PD_I_1P5A);
-        psnk_enable(stack_ctx);
+        Cy_App_Sink_SetCurrent(stack_ctx, CY_PD_I_1P5A);
+        Cy_App_Sink_Enable(stack_ctx);
     }
 }
 
-/* The Type-C source is a Standard Downstream Port (SDP). */
+/*******************************************************************************
+* Function Name: chgdet_fsm_sink_sdp_connected
+********************************************************************************
+* Summary:
+*   - The Type-C source is a Standard Downstream Port (SDP)
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_fsm_sink_sdp_connected(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt)
 {
     if (evt == CHGDET_FSM_EVT_ENTRY)
@@ -231,12 +338,25 @@ static void chgdet_fsm_sink_sdp_connected(cy_stc_pdstack_context_t *stack_ctx, c
 #endif /* defined(CY_DEVICE_CCG6) */
 
         /* Set current limit to 0.5A (SDP) and enable Sink FET if not already turned ON. */
-        psnk_set_current(stack_ctx, CY_PD_ISAFE_DEF);
-        psnk_enable(stack_ctx);
+        Cy_App_Sink_SetCurrent(stack_ctx, CY_PD_ISAFE_DEF);
+        Cy_App_Sink_Enable(stack_ctx);
     }
 }
 
-/* The Type-C source is a Charging Downstream Port (CDP). */
+/*******************************************************************************
+* Function Name: chgdet_fsm_sink_cdp_connected
+********************************************************************************
+* Summary:
+*   - The Type-C source is a Charging Downstream Port (CDP)
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_fsm_sink_cdp_connected(cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt)
 {
     if (evt == CHGDET_FSM_EVT_ENTRY)
@@ -248,11 +368,24 @@ static void chgdet_fsm_sink_cdp_connected(cy_stc_pdstack_context_t *stack_ctx, c
 #endif /* defined(CY_DEVICE_CCG6) */
 
         /* Set current limit to 1.5A (CDP) and enable Sink FET if not already turned ON. */
-        psnk_set_current(stack_ctx, CY_PD_I_1P5A);
-        psnk_enable(stack_ctx);
+        Cy_App_Sink_SetCurrent(stack_ctx, CY_PD_I_1P5A);
+        Cy_App_Sink_Enable(stack_ctx);
     }
 }
 
+/*******************************************************************************
+* Function Name: chgdet_fsm_table
+********************************************************************************
+* Summary:
+*   - Charger detect FSM table
+*
+* Parameters:
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void (*const chgdet_fsm_table[CHGDET_FSM_MAX_EVTS]) (cy_stc_pdstack_context_t *stack_ctx, chgdet_fsm_evt_t evt) =
 {
     chgdet_fsm_off,                                 /* 0: CHGDET_FSM_OFF */
@@ -265,7 +398,19 @@ void (*const chgdet_fsm_table[CHGDET_FSM_MAX_EVTS]) (cy_stc_pdstack_context_t *s
     chgdet_fsm_sink_cdp_connected                   /* 7: CHGDET_FSM_SINK_CDP_CONNECTED */
 };
 
-/* Callback from the PDL driver. */
+/*******************************************************************************
+* Function Name: chgdet_phy_cbk_handler
+********************************************************************************
+* Summary:
+*   - Callback from the PDL driver
+*
+* Parameters:
+*  event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 static void chgdet_phy_cbk_handler(void *drv_ctx, uint32_t event)
 {
     cy_stc_usbpd_context_t *context = (cy_stc_usbpd_context_t *)drv_ctx;
@@ -275,6 +420,21 @@ static void chgdet_phy_cbk_handler(void *drv_ctx, uint32_t event)
 
 #endif /* (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD)) */
 
+/*******************************************************************************
+* Function Name: chgdet_init
+********************************************************************************
+* Summary:
+*   - Initializes the Charger Detect block.
+*   - This should be called one time only at system startup for each port
+*     on which the charger detect state machine needs to run
+*
+* Parameters:
+*  stack_ctx PD Stack context pointer
+*
+* Return:
+*  cy_en_usbpd_status_t
+*
+*******************************************************************************/
 cy_en_usbpd_status_t chgdet_init(cy_stc_pdstack_context_t *stack_ctx)
 {
     cy_en_usbpd_status_t stat = CY_USBPD_STAT_BAD_PARAM;
@@ -296,6 +456,20 @@ cy_en_usbpd_status_t chgdet_init(cy_stc_pdstack_context_t *stack_ctx)
     return stat;
 }
 
+/*******************************************************************************
+* Function Name: chgdet_start
+********************************************************************************
+* Summary:
+*   - Starts the Charger Detect block operation after Type-C connection
+*      has been detected.
+*
+* Parameters:
+*  stack_ctx PD Stack context pointer
+*
+* Return:
+*  cy_en_usbpd_status_t
+*
+*******************************************************************************/
 cy_en_usbpd_status_t chgdet_start(cy_stc_pdstack_context_t *stack_ctx)
 {
 #if (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD))
@@ -312,6 +486,20 @@ cy_en_usbpd_status_t chgdet_start(cy_stc_pdstack_context_t *stack_ctx)
     return CY_USBPD_STAT_SUCCESS;
 }
 
+/*******************************************************************************
+* Function Name: chgdet_stop
+********************************************************************************
+* Summary:
+*   - Stops the Charger Detect block operation once Type-C
+*      disconnect has been detected.
+*
+* Parameters:
+*  stack_ctx PD Stack context pointer
+*
+* Return:
+*  cy_en_usbpd_status_t
+*
+*******************************************************************************/
 cy_en_usbpd_status_t chgdet_stop(cy_stc_pdstack_context_t *stack_ctx)
 {
 #if (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD))
@@ -325,8 +513,8 @@ cy_en_usbpd_status_t chgdet_stop(cy_stc_pdstack_context_t *stack_ctx)
 
     Cy_USBPD_Bch_Phy_DisableComp(drv_ctx, 0u);
     Cy_PdUtils_SwTimer_StopRange(stack_ctx->ptrTimerContext,
-            GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1),
-            GET_APP_TIMER_ID(stack_ctx, APP_CDP_DP_DM_POLL_TIMER));
+            CY_APP_GET_TIMER_ID(stack_ctx, CY_APP_BC_GENERIC_TIMER1),
+            CY_APP_GET_TIMER_ID(stack_ctx, CY_APP_CDP_DP_DM_POLL_TIMER));
     Cy_USBPD_Bch_Phy_Dis(drv_ctx);
 
     chgdet_stat->chgdet_fsm_state = CHGDET_FSM_OFF;
@@ -338,7 +526,7 @@ cy_en_usbpd_status_t chgdet_stop(cy_stc_pdstack_context_t *stack_ctx)
     /* If there is no PD contract, ensure current limit is set to minimum. */
     if (stack_ctx->dpmConfig.contractExist == 0u)
     {
-        psnk_set_current (stack_ctx, CY_PD_ISAFE_0A);
+        Cy_App_Sink_SetCurrent(stack_ctx, CY_PD_ISAFE_0A);
     }
 
 #if defined(CY_DEVICE_CCG6)
@@ -354,6 +542,19 @@ cy_en_usbpd_status_t chgdet_stop(cy_stc_pdstack_context_t *stack_ctx)
     return CY_USBPD_STAT_SUCCESS;
 }
 
+/*******************************************************************************
+* Function Name: chgdet_is_active
+********************************************************************************
+* Summary:
+*   - Returns whether the Charger Detect module is active or not.
+*
+* Parameters:
+*  stack_ctx PD Stack context pointer
+*
+* Return:
+*  bool
+*
+*******************************************************************************/
 bool chgdet_is_active(cy_stc_pdstack_context_t *stack_ctx)
 {
 #if (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD))
@@ -372,6 +573,20 @@ bool chgdet_is_active(cy_stc_pdstack_context_t *stack_ctx)
 #endif /* (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD)) */
 }
 
+/*******************************************************************************
+* Function Name: chgdet_task
+********************************************************************************
+* Summary:
+*   - Performs actions associated with the Charger Detect state machine,
+*      and is expected to be called from the application main.
+*
+* Parameters:
+*  stack_ctx PD Stack context pointer
+*
+* Return:
+*  cy_en_usbpd_status_t
+*
+*******************************************************************************/
 cy_en_usbpd_status_t chgdet_task(cy_stc_pdstack_context_t *stack_ctx)
 {
 #if (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD))
@@ -399,6 +614,19 @@ cy_en_usbpd_status_t chgdet_task(cy_stc_pdstack_context_t *stack_ctx)
     return CY_USBPD_STAT_SUCCESS;
 }
 
+/*******************************************************************************
+* Function Name: chgdet_prepare_deepsleep
+********************************************************************************
+* Summary:
+*   - Prepares the charger detect block for device entry into deep sleep state.
+*
+* Parameters:
+*  stack_ctx PD Stack context pointer
+*
+* Return:
+*  bool
+*
+*******************************************************************************/
 bool chgdet_prepare_deepsleep(cy_stc_pdstack_context_t *stack_ctx)
 {
 #if (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD))
@@ -408,7 +636,7 @@ bool chgdet_prepare_deepsleep(cy_stc_pdstack_context_t *stack_ctx)
     if (
             (chgdet_stat->chgdet_evt == 0u) &&
             (!Cy_PdUtils_SwTimer_RangeEnabled (stack_ctx->ptrTimerContext,
-                    GET_APP_TIMER_ID(stack_ctx, APP_BC_GENERIC_TIMER1), APP_BC_DP_DM_DEBOUNCE_TIMER))
+                    CY_APP_GET_TIMER_ID(stack_ctx, CY_APP_BC_GENERIC_TIMER1), CY_APP_BC_DP_DM_DEBOUNCE_TIMER))
        )
     {
         Cy_USBPD_Bch_Phy_Config_DeepSleep ((cy_stc_usbpd_context_t *)(stack_ctx->ptrUsbPdContext));
@@ -422,6 +650,20 @@ bool chgdet_prepare_deepsleep(cy_stc_pdstack_context_t *stack_ctx)
 #endif /* (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD)) */
 }
 
+/*******************************************************************************
+* Function Name: chgdet_resume
+********************************************************************************
+* Summary:
+*   - Restores the charger detect block into functional state after the
+*      PMG1 device wakes from deep sleep.
+*
+* Parameters:
+*  stack_ctx PD Stack context pointer
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void chgdet_resume(cy_stc_pdstack_context_t *stack_ctx)
 {
 #if (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD))
@@ -431,12 +673,41 @@ void chgdet_resume(cy_stc_pdstack_context_t *stack_ctx)
 #endif /* (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD)) */
 }
 
+/*******************************************************************************
+* Function Name: chgdet_get_status
+********************************************************************************
+* Summary:
+*   - Retrieves the current status of the charger detect state machine.
+*
+* Parameters:
+*  stack_ctx PD Stack context pointer
+*
+* Return:
+*  pointer
+*
+*******************************************************************************/
 const chgdet_status_t* chgdet_get_status(cy_stc_pdstack_context_t *stack_ctx)
 {
     chgdet_status_t *chgdet_stat = &gl_chgdet_status[stack_ctx->port];
     return ((const chgdet_status_t *)chgdet_stat);
 }
 
+/*******************************************************************************
+* Function Name: chgdet_pd_event_handler
+********************************************************************************
+* Summary:
+*   - Updates the charger detect state machine based on event notifications
+*      from the USB-PD Stack. This event handler calls the chgdet_start and
+*      chgdet_stop functions as required.
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  data - Optional data associated with the event
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void chgdet_pd_event_handler(cy_stc_pdstack_context_t *stack_ctx, cy_en_pdstack_app_evt_t evt, const void* dat)
 {
     CY_UNUSED_PARAMETER(dat);
@@ -472,12 +743,41 @@ void chgdet_pd_event_handler(cy_stc_pdstack_context_t *stack_ctx, cy_en_pdstack_
 #endif /* (defined(CY_IP_MXUSBPD) || defined(CY_IP_M0S8USBPD)) */
 }
 
+/*******************************************************************************
+* Function Name: chgdet_fsm_set_evt
+********************************************************************************
+* Summary:
+*   - Sets an event status for the charger detect state machine to process
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  evt_mask - Mask specifying events to be set
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void chgdet_fsm_set_evt(cy_stc_pdstack_context_t *stack_ctx, uint32_t evt_mask)
 {
     chgdet_status_t *chgdet_stat = &gl_chgdet_status[stack_ctx->port];
     chgdet_stat->chgdet_evt |= evt_mask;
 }
 
+/*******************************************************************************
+* Function Name: chgdet_fsm_clear_evt
+********************************************************************************
+* Summary:
+*   - Clears one or more events after the charger detect state machine has
+*      dealt with them.
+*
+* Parameters:
+*  stack_ctx - PD Stack context pointer
+*  evt_mask - Mask specifying events to be set
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void chgdet_fsm_clear_evt(cy_stc_pdstack_context_t *stack_ctx, uint32_t evt_mask)
 {
     chgdet_status_t *chgdet_stat = &gl_chgdet_status[stack_ctx->port];

@@ -8,7 +8,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -46,11 +46,6 @@
 
 #if ENABLE_DPS310_I2C_INTERFACE
 /*******************************************************************************
-* Macros
-*******************************************************************************/
-
-
-/*******************************************************************************
 * Global variables
 *******************************************************************************/
 dps310_param myDPS310 =
@@ -58,13 +53,21 @@ dps310_param myDPS310 =
     .m_slaveAddress     = I2C_DPS310_SLAVE_ADDR
 };
 
-
-static int16_t Dps310getSingleResult(float *result, uint8_t m_opMode);
-
 const int32_t Dps310_scaling_facts[DPS__NUM_OF_SCAL_FACTS] = {524288, 1572864, 3670016, 7864320, 253952, 516096, 1040384, 2088960};
 
-
-/* The Below section of code read and write of DPS310 register field */
+/*******************************************************************************
+* Function Name: Dps310readByteBitfield
+********************************************************************************
+* Summary:
+*   - Read DPS310 register field
+*
+* Parameters:
+*  regMask
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int8_t Dps310readByteBitfield(RegMask_t regMask)
 {
     uint8_t buff;
@@ -76,6 +79,20 @@ int8_t Dps310readByteBitfield(RegMask_t regMask)
     return (((uint8_t)buff) & regMask.mask) >> regMask.shift;
 }
 
+/*******************************************************************************
+* Function Name: Dps310writeByteBitfield
+********************************************************************************
+* Summary:
+*   - Write DPS310 register field
+*
+* Parameters:
+*  data
+*  regMask
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int8_t Dps310writeByteBitfield(uint8_t data, RegMask_t regMask)
 {
     uint8_t old_val;
@@ -95,6 +112,20 @@ int8_t Dps310writeByteBitfield(uint8_t data, RegMask_t regMask)
     return DPS__SUCCEEDED;
 }
 
+/*******************************************************************************
+* Function Name: Dps310getTwosComplement
+********************************************************************************
+* Summary:
+*   - Write DPS310 register field
+*
+* Parameters:
+*  raw
+*  length
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void Dps310getTwosComplement(int32_t *raw, uint8_t length)
 {
     if (*raw & ((uint32_t)1 << (length - 1)))
@@ -103,12 +134,24 @@ void Dps310getTwosComplement(int32_t *raw, uint8_t length)
     }
 }
 
-/* The Below section of code implements DPS310 Co-efficient register read and its calculation */
+/*******************************************************************************
+* Function Name: Dps310readcoeffs
+********************************************************************************
+* Summary:
+*   - Reads DPS310 Co-efficient register and performs calculation on it
+*
+* Parameters:
+*  void
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int16_t Dps310readcoeffs(void)
 {
     uint8_t retry_count = 3;
     uint8_t buffer[18];
-    //read COEF registers to buffer
+    /* Read COEF registers to buffer */
     while (DPS310_I2CRegRead(coeffBlock.regAddress, buffer, coeffBlock.length) != I2C_SUCCESS )
     {
         retry_count--;
@@ -118,13 +161,13 @@ int16_t Dps310readcoeffs(void)
         }
     }
 
-    //compose coefficients from buffer content
+    /* compose coefficients from buffer content */
     myDPS310.m_c0Half = ((uint32_t)buffer[0] << 4) | (((uint32_t)buffer[1] >> 4) & 0x0F);
     Dps310getTwosComplement(&myDPS310.m_c0Half, 12);
-    //c0 is only used as c0*0.5, so c0_half is calculated immediately
+    /* c0 is only used as c0*0.5, so c0_half is calculated immediately */
     myDPS310.m_c0Half = myDPS310.m_c0Half / 2U;
 
-    //now do the same thing for all other coefficients
+    /* now do the same thing for all other coefficients */
     myDPS310.m_c1 = (((uint32_t)buffer[1] & 0x0F) << 8) | (uint32_t)buffer[2];
     Dps310getTwosComplement(&myDPS310.m_c1, 12);
     myDPS310.m_c00 = ((uint32_t)buffer[3] << 12) | ((uint32_t)buffer[4] << 4) | (((uint32_t)buffer[5] >> 4) & 0x0F);
@@ -147,6 +190,19 @@ int16_t Dps310readcoeffs(void)
     return DPS__SUCCEEDED;
 }
 
+/*******************************************************************************
+* Function Name: Dps310correctTemp
+********************************************************************************
+* Summary:
+*   - Corrects the DPS310 Temperature
+*
+* Parameters:
+*  none
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void Dps310correctTemp(void)
 {
     uint8_t efuse_correction[5][2] ={
@@ -170,6 +226,19 @@ void Dps310correctTemp(void)
 
 }
 
+/*******************************************************************************
+* Function Name: Dps310setOpMode
+********************************************************************************
+* Summary:
+*   - Sets DPS310 Operation Mode
+*
+* Parameters:
+*  opMode
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int16_t Dps310setOpMode(uint8_t opMode)
 {
     if (Dps310writeByteBitfield(opMode, config_registers[MSR_CTRL]) == -1)
@@ -179,9 +248,20 @@ int16_t Dps310setOpMode(uint8_t opMode)
     return DPS__SUCCEEDED;
 }
 
-/* The Below section of code configures the temperature and pressure sensor data
- * over sampling rate */
-
+/*******************************************************************************
+* Function Name: Dps310configTemp
+********************************************************************************
+* Summary:
+*   - configures the temperature sensor data over sampling rate
+*
+* Parameters:
+*  tempMr
+*  tempOsr
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int16_t Dps310configTemp(uint8_t tempMr, uint8_t tempOsr)
 {
     tempMr &= 0x07;
@@ -213,6 +293,20 @@ int16_t Dps310configTemp(uint8_t tempMr, uint8_t tempOsr)
     return ret;
 }
 
+/*******************************************************************************
+* Function Name: Dps310configPressure
+********************************************************************************
+* Summary:
+*   - configures the pressure sensor data over sampling rate
+*
+* Parameters:
+*  prsMr
+*  prsOsr
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int16_t Dps310configPressure(uint8_t prsMr, uint8_t prsOsr)
 {
     prsMr &= 0x07;
@@ -240,14 +334,26 @@ int16_t Dps310configPressure(uint8_t prsMr, uint8_t prsOsr)
     return ret;
 }
 
-/* The Below section of code implements DPS310 initialization */
+/*******************************************************************************
+* Function Name: Dps310init
+********************************************************************************
+* Summary:
+*   - Implements DPS310 initialization
+*
+* Parameters:
+*  none
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void Dps310init(void)
 {
     myDPS310.m_initFail = 0u;
     int16_t prodId = Dps310readByteBitfield(registers[PROD_ID]);
     if (prodId < 0)
     {
-        //Connected device is not a Dps310
+        /* Connected device is not a Dps310 */
         myDPS310.m_initFail = 1U;
         return;
     }
@@ -261,7 +367,7 @@ void Dps310init(void)
     }
     myDPS310.m_revisionID = revId;
 
-    //find out which temperature sensor is calibrated with coefficients...
+    /* find out which temperature sensor is calibrated with coefficients */
     int16_t sensor = Dps310readByteBitfield(registers[TEMP_SENSORREC]);
     if (sensor < 0)
     {
@@ -269,7 +375,7 @@ void Dps310init(void)
         return;
     }
 
-    //...and use this sensor for temperature measurement
+    /* temperature measurement */
     myDPS310.m_tempSensor = sensor;
     if (Dps310writeByteBitfield((uint8_t)sensor, registers[TEMP_SENSOR]) < 0)
     {
@@ -284,14 +390,14 @@ void Dps310init(void)
         return;
     }
 
-    //read coefficients
+    /* read coefficients */
     if (Dps310readcoeffs() < 0)
     {
         myDPS310.m_initFail = 1U;
         return;
     }
 
-    //set measurement precision and rate to standard values;
+    /* set measurement precision and rate to standard values */
     Dps310configTemp(DPS__MEASUREMENT_RATE_4, DPS__OVERSAMPLING_RATE_8);
     Dps310configPressure(DPS__MEASUREMENT_RATE_4, DPS__OVERSAMPLING_RATE_8);
 
@@ -300,6 +406,19 @@ void Dps310init(void)
     Dps310correctTemp();
 }
 
+/*******************************************************************************
+* Function Name: isDps310InitComplete
+********************************************************************************
+* Summary:
+*   - Checks status of DPS310 initialization
+*
+* Parameters:
+*  none
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int isDps310InitComplete (void)
 {
     if (myDPS310.m_initFail)
@@ -310,9 +429,20 @@ int isDps310InitComplete (void)
     return DPS__SUCCEEDED;
 }
 
-/* The Below section of code implements the temperature and pressure calculation using the raw
- * register data and the temperature/ pressure co-efficient
- */
+/*******************************************************************************
+* Function Name: Dps310calcTemp
+********************************************************************************
+* Summary:
+*   - Implements the temperature calculation using the raw
+*      register data and the temperature co-efficient
+*
+* Parameters:
+*  raw
+*
+* Return:
+*  float
+*
+*******************************************************************************/
 float Dps310calcTemp(int32_t raw)
 {
     float temp = raw;
@@ -329,21 +459,49 @@ float Dps310calcTemp(int32_t raw)
     return temp;
 }
 
+/*******************************************************************************
+* Function Name: Dps310calcPressure
+********************************************************************************
+* Summary:
+*   - Implements the pressure calculation using the raw
+*      register data and the pressure co-efficient
+*
+* Parameters:
+*  raw
+*
+* Return:
+*  float
+*
+*******************************************************************************/
 float Dps310calcPressure(int32_t raw)
 {
     float prs = raw;
-    //scale pressure according to scaling table and oversampling
+    /* scale pressure according to scaling table and over-sampling */
     prs /= Dps310_scaling_facts[myDPS310.m_prsOsr];
 
-    //Calculate compensated pressure
+    /* Calculate compensated pressure */
     prs = myDPS310.m_c00 + prs * (myDPS310.m_c10 + prs * (myDPS310.m_c20 + prs * myDPS310.m_c30)) +
             myDPS310.m_lastTempScal * (myDPS310.m_c01 + prs * (myDPS310.m_c11 + prs * myDPS310.m_c21));
 
     prs *= 0.01;
-    //return pressure
+    /* return pressure */
     return prs;
 }
 
+/*******************************************************************************
+* Function Name: Dps310getRawResult
+********************************************************************************
+* Summary:
+*   - Checks status of DPS310 result
+*
+* Parameters:
+*  raw
+*  reg
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int16_t Dps310getRawResult(int32_t *raw, RegBlock_t reg)
 {
     uint8_t buffer[DPS__RESULT_BLOCK_LENGTH] = {0};
@@ -357,14 +515,26 @@ int16_t Dps310getRawResult(int32_t *raw, RegBlock_t reg)
     return DPS__FAIL_UNKNOWN;
 }
 
-/* The Below section of code implements reading the temperature
- * and pressure data from DPS310 .
- */
+/*******************************************************************************
+* Function Name: Dps310getSingleResult
+********************************************************************************
+* Summary:
+*   - Reads the result of DPS310
+*
+* Parameters:
+*  result
+*  m_opMode
+*
+* Return:
+*  static
+*
+*******************************************************************************/
 static int16_t Dps310getSingleResult(float *result, uint8_t m_opMode)
 {
     int16_t rdy;
     int32_t raw_val;
-    //abort if initialization failed
+
+    /* Abort if initialization failed */
     if (myDPS310.m_initFail)
     {
         return DPS__FAIL_INIT_FAILED;
@@ -372,16 +542,16 @@ static int16_t Dps310getSingleResult(float *result, uint8_t m_opMode)
 
     switch (m_opMode)
     {
-    case CMD_TEMP: //temperature
+    case CMD_TEMP: /* temperature */
         rdy = Dps310readByteBitfield(config_registers[TEMP_RDY]);
         break;
-    case CMD_PRS: //pressure
+    case CMD_PRS: /* pressure */
         rdy = Dps310readByteBitfield(config_registers[PRS_RDY]);
         break;
-    default: //DPS310 not in command mode
+    default: /* DPS310 not in command mode */
         return DPS__FAIL_TOOBUSY;
     }
-    //read new measurement result
+    /* read new measurement result */
     if (rdy == 0x00)
         return DPS__FAIL_TOOBUSY;
 
@@ -389,14 +559,14 @@ static int16_t Dps310getSingleResult(float *result, uint8_t m_opMode)
 
     switch (m_opMode)
     {
-    case CMD_TEMP: //temperature
+    case CMD_TEMP: /* temperature */
         if( Dps310getRawResult(&raw_val, registerBlocks[TEMP]) == DPS__SUCCEEDED)
         {
             *result = Dps310calcTemp(raw_val);
             return DPS__SUCCEEDED; 
         }
         return DPS__FAIL_UNKNOWN;
-    default:     // Handles the case of CMD_PRS (pressure)
+    default:     /* Handles the case of CMD_PRS (pressure) */
         if( Dps310getRawResult(&raw_val, registerBlocks[PRS]) == DPS__SUCCEEDED)
         {
             *result = Dps310calcPressure(raw_val);
@@ -406,7 +576,19 @@ static int16_t Dps310getSingleResult(float *result, uint8_t m_opMode)
     }
 }
 
-
+/*******************************************************************************
+* Function Name: dps310_read_data
+********************************************************************************
+* Summary:
+*   - Displays the temperature and pressure
+*
+* Parameters:
+*  none
+*
+* Return:
+*  None
+*
+*******************************************************************************/
 void dps310_read_data (void)
 {
     float temperature;
@@ -419,14 +601,14 @@ void dps310_read_data (void)
     if(Dps310getSingleResult(&temperature, CMD_TEMP) < DPS__SUCCEEDED )
     {
         temp_err_cnt++;
-        if(temp_err_cnt > 3)
+        if(temp_err_cnt > 4)
         {
 #if DEBUG_PRINT
             /* Print error message only if the I2C read fails more than 3 times */
-            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r I2C Connection Failed \0");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r I2C Connection Failed1 \0");
 #endif
-            temp_err_cnt = 0;
         }
+        temp_err_cnt = 0;
         return;
     }
 #if DEBUG_PRINT
@@ -444,7 +626,7 @@ void dps310_read_data (void)
         {
 #if DEBUG_PRINT
             /* Print error message only if the I2C read fails more than 3 times */
-            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r I2C connection Failed \0");
+            Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r I2C connection Failed2 \0");
 #endif
             prs_err_cnt = 0;
         }
@@ -459,5 +641,75 @@ void dps310_read_data (void)
 #endif
 }
 
+#if DEBUG_PRINT
+/*******************************************************************************
+* Function Name: NumToString
+********************************************************************************
+* Summary:
+*   - Converts an integer to string
+*
+* Parameters:
+*  n
+*  buffer
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+void NumToString(int n, char *buffer)
+{
+    uint8_t i = 0, j =0;
+    char temp[100];
+
+    while(n!=0)
+    {
+        temp[i++] = n%10 + '0';
+        n = n/10;
+    }
+    for(; j<i ; j++)
+    {
+        buffer[j] = temp[i -j -1];
+    }
+    buffer[i] = '\0';
+}
+
+/*******************************************************************************
+* Function Name: FloatToString
+********************************************************************************
+* Summary:
+*   - Converts an Floating point data to string
+*   - Character conversion function
+*
+* Parameters:
+*  data
+*  buffer
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+void FloatToString(float data, char *buffer)
+{
+    uint8_t i = 0, j =0;
+    uint32_t n= (uint32_t)(data * 100);
+    char temp[10];
+
+    while(n!=0)
+    {
+        temp[i++] = n%10 + '0';
+        n = n/10;
+        if(i == 2)
+        {
+            temp[i++] = '.';
+        }
+    }
+    for(; j<i ; j++)
+    {
+        buffer[j] = temp[i -j -1];
+    }
+    buffer[i] = '\0';
+}
+
+#endif /* DEBUG_PRINT */
 
 #endif /* ENABLE_DPS310_I2C_INTERFACE */

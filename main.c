@@ -1,14 +1,14 @@
 /******************************************************************************
 * File Name:   main.c
 *
-* Description: This is the source code for the PMG1 USBPD Sink DPS310 I2C Sensor
-*              Example for ModusToolbox.
+* Description: This is the source code for the USBPD Sink DPS310-I2C-Sensor
+*              for ModusToolbox.
 *
 * Related Document: See README.md
 *
 *
 *******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -40,11 +40,14 @@
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
+
+/*******************************************************************************
+ * Include header files
+ ******************************************************************************/
 #include "cy_pdl.h"
 #include "cybsp.h"
 #include "config.h"
 #include "i2c_master.h"
-
 #include "cy_pdutils_sw_timer.h"
 #include "cy_usbpd_common.h"
 #include "cy_pdstack_common.h"
@@ -52,44 +55,112 @@
 #include "cy_pdstack_dpm.h"
 #include "cy_usbpd_vbus_ctrl.h"
 #include "cy_usbpd_phy.h"
-#include "instrumentation.h"
-#include "app.h"
-#include "pdo.h"
-#include "psink.h"
-#include "swap.h"
-#include "vdm.h"
-#include "charger_detect.h"
+#include "cy_app_instrumentation.h"
+#include "cy_app.h"
+#include "cy_app_pdo.h"
+#include "cy_app_sink.h"
+#include "cy_app_swap.h"
+#include "cy_app_vdm.h"
+#include "cy_app_battery_charging.h"
+#include "cy_app_charger_detect.h"
 #include "mtbcfg_ezpd.h"
-#include <stdio.h>
-#include <inttypes.h>
-
-/* CY ASSERT failure */
-#define CY_ASSERT_FAILED    (0u)
+#include "cy_app_fault_handlers.h"
+#include "stdio.h"
+#include "inttypes.h"
 
 /* Debug print macro to enable UART print */
 #define DEBUG_PRINT    (1u)
 
+/*******************************************************************************
+* Structure definitions
+*******************************************************************************/
+/* Structure to hold the user LED status. */
+typedef struct
+{
+    GPIO_PRT_Type* gpioPort;    /* User LED port base address */
+    uint32_t gpioPin;           /* User LED pin GPIO number */
+    uint16_t blinkRate;         /* User LED blink rate in millisecond */
+}cy_stc_user_led_status;
+
+/*******************************************************************************
+* Global Variables
+*******************************************************************************/
+#if ENABLE_DPS310_I2C_INTERFACE
+bool is_sensor_rdy_to_init = false;
+bool is_dps310_initialized = false;
+volatile bool sys_pwr_state = SYSTEM_PWR_STATE_OFF;
+#endif /* ENABLE_DPS310_I2C_INTERFACE */
+
 cy_stc_pdutils_sw_timer_t gl_TimerCtx;
 cy_stc_usbpd_context_t gl_UsbPdPort0Ctx;
-
 cy_stc_pdstack_context_t gl_PdStackPort0Ctx;
+void NumToString(int n, char *buffer);
+#if PMG1_PD_DUALPORT_ENABLE
+cy_stc_usbpd_context_t gl_UsbPdPort1Ctx;
+cy_stc_pdstack_context_t gl_PdStackPort1Ctx;
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
-/* Structure for UART Context */
-cy_stc_scb_uart_context_t CYBSP_UART_context;
+#if APP_FW_LED_ENABLE
+/* Variable to store the user LED status */
+static cy_stc_user_led_status gl_userLedStatus[NO_OF_TYPEC_PORTS] =
+{
+    {CYBSP_USER_LED1_PORT, CYBSP_USER_LED1_PIN, LED_TIMER_PERIOD_DETACHED},
+#if PMG1_PD_DUALPORT_ENABLE
+    {CYBSP_USER_LED2_PORT, CYBSP_USER_LED2_PIN, LED_TIMER_PERIOD_DETACHED},
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+};
+#endif /* APP_FW_LED_ENABLE */
 
 const cy_stc_pdstack_dpm_params_t pdstack_port0_dpm_params =
 {
-    .dpmSnkWaitCapPeriod = 400,
-    .dpmRpAudioAcc = CY_PD_RP_TERM_RP_CUR_DEF,
-    .dpmDefCableCap = 300,
-    .muxEnableDelayPeriod = 0,
-    .typeCSnkWaitCapPeriod = 0,
-    .defCur = 90
+        .dpmSnkWaitCapPeriod = 400,
+        .dpmRpAudioAcc = CY_PD_RP_TERM_RP_CUR_DEF,
+        .dpmDefCableCap = 300,
+        .muxEnableDelayPeriod = 0,
+        .typeCSnkWaitCapPeriod = 0,
+        .defCur = 90
 };
+
+#if PMG1_PD_DUALPORT_ENABLE
+const cy_stc_pdstack_dpm_params_t pdstack_port1_dpm_params =
+{
+        .dpmSnkWaitCapPeriod = 400,
+        .dpmRpAudioAcc = CY_PD_RP_TERM_RP_CUR_DEF,
+        .dpmDefCableCap = 300,
+        .muxEnableDelayPeriod = 0,
+        .typeCSnkWaitCapPeriod = 0,
+        .defCur = 90
+};
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+
+uint32_t gl_discIdResp[7] = {0xFF00A841, 0x184004B4, 0x00000000, 0xF5000000};
+
+const cy_stc_app_params_t port0_app_params =
+{
+    .appVbusPollAdcId = APP_VBUS_POLL_ADC_ID,
+    .appVbusPollAdcInput = APP_VBUS_POLL_ADC_INPUT,
+    .discIdResp = (cy_pd_pd_do_t *)&gl_discIdResp[0],
+    .discIdLen = 0x14,
+    .swapResponse = 0x3F
+};
+
+#if PMG1_PD_DUALPORT_ENABLE
+const cy_stc_app_params_t port1_app_params =
+{
+    .appVbusPollAdcId = APP_VBUS_POLL_ADC_ID,
+    .appVbusPollAdcInput = APP_VBUS_POLL_ADC_INPUT,
+    .discIdResp = (cy_pd_pd_do_t *)&gl_discIdResp[0],
+    .discIdLen = 0x14,
+    .swapResponse = 0x3F
+};
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
 cy_stc_pdstack_context_t * gl_PdStackContexts[NO_OF_TYPEC_PORTS] =
 {
-    &gl_PdStackPort0Ctx,
+        &gl_PdStackPort0Ctx,
+#if PMG1_PD_DUALPORT_ENABLE
+        &gl_PdStackPort1Ctx
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 };
 
 bool mux_ctrl_init(uint8_t port)
@@ -117,34 +188,111 @@ const cy_stc_sysint_t usbpd_port0_intr1_config =
     .intrPriority = 0U,
 };
 
+#if PMG1_PD_DUALPORT_ENABLE
+const cy_stc_sysint_t usbpd_port1_intr0_config =
+{
+    .intrSrc = (IRQn_Type)mtb_usbpd_port1_IRQ,
+    .intrPriority = 0U,
+};
+
+const cy_stc_sysint_t usbpd_port1_intr1_config =
+{
+    .intrSrc = (IRQn_Type)mtb_usbpd_port1_DS_IRQ,
+    .intrPriority = 0U,
+};
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+
+/*******************************************************************************
+* Function Name: get_pdstack_context
+********************************************************************************
+* Summary:
+*   Returns the respective port PD Stack Context
+*
+* Parameters:
+*  portIdx - Port Index
+*
+* Return:
+*  cy_stc_pdstack_context_t
+*
+*******************************************************************************/
 cy_stc_pdstack_context_t *get_pdstack_context(uint8_t portIdx)
 {
     return (gl_PdStackContexts[portIdx]);
 }
 
-/* Solution PD event handler */
+/*******************************************************************************
+* Function Name: sln_pd_event_handler
+********************************************************************************
+* Summary:
+*   Solution PD Event Handler
+*   Handles the Extended message event
+*
+* Parameters:
+*  ctx - PD Stack Context
+*  evt - App Event
+*  data - Data
+*
+* Return:
+*  None
+*
+*******************************************************************************/
 void sln_pd_event_handler(cy_stc_pdstack_context_t* ctx, cy_en_pdstack_app_evt_t evt, const void *data)
 {
     (void)ctx;
-
-    if(evt == APP_EVT_HANDLE_EXTENDED_MSG)
-    {
-        cy_stc_pd_packet_extd_t * ext_mes = (cy_stc_pd_packet_extd_t * )data;
-        if ((ext_mes->msg != CY_PDSTACK_EXTD_MSG_SECURITY_RESP) && (ext_mes->msg != CY_PDSTACK_EXTD_MSG_FW_UPDATE_RESP))
-        {
-            /* Send Not supported message */
-            Cy_PdStack_Dpm_SendPdCommand(ctx, CY_PDSTACK_DPM_CMD_SEND_NOT_SUPPORTED, NULL, true, NULL);
-        }
-    }
+    switch (evt)
+       {
+           case APP_EVT_TYPEC_STARTED:
+               Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r TYPEC_STARTED \0");
+                break;
+           case APP_EVT_CONNECT:
+               Cy_SCB_UART_PutString(CYBSP_UART_HW, "\n\r TYPEC_CONNECT \0");
+#if ENABLE_DPS310_I2C_INTERFACE
+            if(sys_pwr_state == SYSTEM_PWR_STATE_ON)
+            {
+                is_sensor_rdy_to_init= true;
+            }
+#endif /* ENABLE_DPS310_I2C_INTERFACE */
+               break;
+           default:
+               break;
+       }
+    (void)data;
 }
 
-void instrumentation_cb(uint8_t port, inst_evt_t evt)
+/*******************************************************************************
+* Function Name: instrumentation_cb
+********************************************************************************
+* Summary:
+*  Callback function for handling instrumentation faults
+*
+* Parameters:
+*  port - Port
+*  evt - Event
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+void instrumentation_cb(uint8_t port, uint8_t evt)
 {
     uint8_t evt_offset = APP_TOTAL_EVENTS;
     evt += evt_offset;
     sln_pd_event_handler(&gl_PdStackPort0Ctx, (cy_en_pdstack_app_evt_t)evt, NULL);
 }
 
+/*******************************************************************************
+* Function Name: wdt_interrupt_handler
+********************************************************************************
+* Summary:
+*  Interrupt Handler for Watch Dog Timer
+*
+* Parameters:
+*  None
+*
+* Return:
+*  None
+*
+*******************************************************************************/
 static void wdt_interrupt_handler(void)
 {
     /* Clear WDT pending interrupt */
@@ -159,20 +307,184 @@ static void wdt_interrupt_handler(void)
     Cy_PdUtils_SwTimer_InterruptHandler (&(gl_TimerCtx));
 }
 
+/*******************************************************************************
+* Function Name: cy_usbpd0_intr0_handler
+********************************************************************************
+* Summary:
+*  Interrupt Handler for USBPD0 Interrupt 0
+*
+* Parameters:
+*  None
+*
+* Return:
+*  None
+*
+*******************************************************************************/
 static void cy_usbpd0_intr0_handler(void)
 {
     Cy_USBPD_Intr0Handler(&gl_UsbPdPort0Ctx);
 }
 
+/*******************************************************************************
+* Function Name: cy_usbpd0_intr1_handler
+********************************************************************************
+* Summary:
+*  Interrupt Handler for USBPD0 Interrupt 1
+*
+* Parameters:
+*  None
+*
+* Return:
+*  None
+*
+*******************************************************************************/
 static void cy_usbpd0_intr1_handler(void)
 {
     Cy_USBPD_Intr1Handler(&gl_UsbPdPort0Ctx);
 }
 
+#if PMG1_PD_DUALPORT_ENABLE
+/*******************************************************************************
+* Function Name: cy_usbpd1_intr0_handler
+********************************************************************************
+* Summary:
+*  Interrupt Handler for USBPD1 Interrupt 0
+*
+* Parameters:
+*  None
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+static void cy_usbpd1_intr0_handler(void)
+{
+    Cy_USBPD_Intr0Handler(&gl_UsbPdPort1Ctx);
+}
+
+/*******************************************************************************
+* Function Name: cy_usbpd1_intr1_handler
+********************************************************************************
+* Summary:
+*  Interrupt Handler for USBPD1 Interrupt 1
+*
+* Parameters:
+*  None
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+static void cy_usbpd1_intr1_handler(void)
+{
+    Cy_USBPD_Intr1Handler(&gl_UsbPdPort1Ctx);
+}
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+
+#if APP_FW_LED_ENABLE
+/*******************************************************************************
+* Function Name: led_timer_cb
+********************************************************************************
+* Summary:
+*  Sets the desired LED blink rate based on the Type-C connection
+*
+* Parameters:
+*  id - Timer ID
+*  callbackContext - Context
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+void led_timer_cb (
+        cy_timer_id_t id,            /**< Timer ID for which callback is being generated. */
+        void *callbackContext)       /**< Timer module Context. */
+{
+    cy_stc_pdstack_context_t *stack_ctx = (cy_stc_pdstack_context_t *)callbackContext;
+    cy_stc_user_led_status *user_led = &gl_userLedStatus[stack_ctx->port];
+#if BATTERY_CHARGING_ENABLE
+    const cy_stc_bc_status_t    *bc_stat;
+#endif /* #if BATTERY_CHARGING_ENABLE */
+
+    /* Toggle the User LED and re-start timer to schedule the next toggle event. */
+    Cy_GPIO_Inv(user_led->gpioPort, user_led->gpioPin);
+
+    /* Calculate the desired LED blink rate based on the correct Type-C connection state. */
+    if (stack_ctx->dpmConfig.attach)
+    {
+        if (stack_ctx->dpmConfig.contractExist)
+        {
+            user_led->blinkRate = LED_TIMER_PERIOD_PD_SRC;
+        }
+        else
+        {
+#if BATTERY_CHARGING_ENABLE
+            bc_stat = Cy_App_Bc_GetStatus(stack_ctx->ptrUsbPdContext);
+            if (bc_stat->bc_fsm_state == BC_FSM_SINK_DCP_CONNECTED)
+            {
+                user_led->blinkRate = LED_TIMER_PERIOD_DCP_SRC;
+            }
+            else if (bc_stat->bc_fsm_state == BC_FSM_SINK_CDP_CONNECTED)
+            {
+                user_led->blinkRate = LED_TIMER_PERIOD_CDP_SRC;
+            }
+            else if (bc_stat->bc_fsm_state == BC_FSM_SINK_APPLE_BRICK_ID_DETECT)
+            {
+                user_led->blinkRate = LED_TIMER_PERIOD_APPLE_SRC;
+            }
+            else
+#endif /* BATTERY_CHARGING_ENABLE */
+            {
+                user_led->blinkRate = LED_TIMER_PERIOD_TYPEC_SRC;
+            }
+        }
+    }
+    else
+    {
+        user_led->blinkRate = LED_TIMER_PERIOD_DETACHED;
+    }
+
+    Cy_PdUtils_SwTimer_Start (&gl_TimerCtx, callbackContext, id, user_led->blinkRate, led_timer_cb);
+}
+#endif /* APP_FW_LED_ENABLE */
+
+/*******************************************************************************
+* Function Name: get_dpm_connect_stat
+********************************************************************************
+* Summary:
+*  Gets the DPM configuration for Port 0
+*
+* Parameters:
+*  None
+*
+* Return:
+*  cy_stc_pd_dpm_config_t
+*
+*******************************************************************************/
 cy_stc_pd_dpm_config_t* get_dpm_connect_stat(void)
 {
     return &(gl_PdStackPort0Ctx.dpmConfig);
 }
+
+#if PMG1_PD_DUALPORT_ENABLE
+/*******************************************************************************
+* Function Name: get_dpm_port1_connect_stat
+********************************************************************************
+* Summary:
+*  Gets the DPM configuration for Port 1
+*
+* Parameters:
+*  None
+*
+* Return:
+*  cy_stc_pd_dpm_config_t
+*
+*******************************************************************************/
+cy_stc_pd_dpm_config_t* get_dpm_port1_connect_stat()
+{
+    return &(gl_PdStackPort1Ctx.dpmConfig);
+}
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
 /*
  * Application callback functions for the DPM. Since this application
@@ -180,30 +492,101 @@ cy_stc_pd_dpm_config_t* get_dpm_connect_stat(void)
  */
 const cy_stc_pdstack_app_cbk_t app_callback =
 {
-    app_event_handler,
-    vconn_enable,
-    vconn_disable,
-    vconn_is_present,
-    vbus_is_present,
-    vbus_discharge_on,
-    vbus_discharge_off,
-    psnk_set_voltage,
-    psnk_set_current,
-    psnk_enable,
-    psnk_disable,
-    eval_src_cap,
-    eval_dr_swap,
-    eval_pr_swap,
-    eval_vconn_swap,
-    eval_vdm,
-    vbus_get_value,
+    .app_event_handler = Cy_App_EventHandler,
+    .vconn_enable = Cy_App_VconnEnable,
+    .vconn_disable = Cy_App_VconnDisable,
+    .vconn_is_present = Cy_App_VconnIsPresent,
+    .vbus_is_present = Cy_App_VbusIsPresent,
+    .vbus_discharge_on = Cy_App_VbusDischargeOn,
+    .vbus_discharge_off = Cy_App_VbusDischargeOff,
+    .psnk_set_voltage = Cy_App_Sink_SetVoltage,
+    .psnk_set_current = Cy_App_Sink_SetCurrent,
+    .psnk_enable = Cy_App_Sink_Enable,
+    .psnk_disable = Cy_App_Sink_Disable,
+    .eval_src_cap = Cy_App_Pdo_EvalSrcCap,
+    .eval_dr_swap = Cy_App_Swap_EvalDrSwap,
+    .eval_pr_swap = Cy_App_Swap_EvalPrSwap,
+    .eval_vconn_swap = Cy_App_Swap_EvalVconnSwap,
+    .eval_vdm = Cy_App_Vdm_EvalVdmMsg,
+    .vbus_get_value = Cy_App_VbusGetValue
 };
 
+/*******************************************************************************
+* Function Name: app_get_callback_ptr
+********************************************************************************
+* Summary:
+*  Returns pointer to the structure holding the application callback functions
+*
+* Parameters:
+*  context - PD Stack Context
+*
+* Return:
+*  cy_stc_pdstack_app_cbk_t
+*
+*******************************************************************************/
 cy_stc_pdstack_app_cbk_t* app_get_callback_ptr(cy_stc_pdstack_context_t * context)
 {
     (void)context;
     /* Solution callback pointer is same for all ports */
     return ((cy_stc_pdstack_app_cbk_t *)(&app_callback));
+}
+
+/*******************************************************************************
+* Function Name: soln_sink_fet_off
+********************************************************************************
+* Summary:
+*  Turns off the consumer FET
+*
+* Parameters:
+*  context - PD Stack Context
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+void soln_sink_fet_off(cy_stc_pdstack_context_t * context)
+{
+#if CY_APP_SINK_FET_CTRL_GPIO_EN
+    if (context->port == 0u)
+    {
+        Cy_GPIO_Clr (PFET_SNK_CTRL_P0_PORT, PFET_SNK_CTRL_P0_PIN);
+    }
+#if PMG1_PD_DUALPORT_ENABLE
+    else
+    {
+        Cy_GPIO_Clr (PFET_SNK_CTRL_P1_PORT, PFET_SNK_CTRL_P1_PIN);
+    }
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+#endif /* CY_APP_SINK_FET_CTRL_GPIO_EN */
+}
+
+/*******************************************************************************
+* Function Name: soln_sink_fet_on
+********************************************************************************
+* Summary:
+*  Turns on the consumer FET
+*
+* Parameters:
+*  context - PD Stack Context
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+void soln_sink_fet_on(cy_stc_pdstack_context_t * context)
+{
+#if CY_APP_SINK_FET_CTRL_GPIO_EN
+    if (context->port == 0u)
+    {
+        Cy_GPIO_Set (PFET_SNK_CTRL_P0_PORT, PFET_SNK_CTRL_P0_PIN);
+    }
+#if PMG1_PD_DUALPORT_ENABLE
+    else
+    {
+        Cy_GPIO_Set (PFET_SNK_CTRL_P1_PORT, PFET_SNK_CTRL_P1_PIN);
+    }
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+#endif /* CY_APP_SINK_FET_CTRL_GPIO_EN */
 }
 
 /* The Below section of code implements the De-bounce for the User button press */
@@ -215,12 +598,23 @@ cy_stc_pdstack_app_cbk_t* app_get_callback_ptr(cy_stc_pdstack_context_t * contex
 #define BUTTON_PRESS_TOTAL_DEBOUNCE_COUNT       (15u)
 
 volatile uint16_t button_press_count = 0;
-volatile bool sys_pwr_state = SYSTEM_PWR_STATE_OFF;
 volatile bool prev_sys_state = SYSTEM_PWR_STATE_OFF;
 
-void user_button_press_timer_cb (
-    cy_timer_id_t id,            /**< Timer ID for which callback is being generated. */
-    void *callbackContext)       /**< Timer module Context. */
+/*******************************************************************************
+* Function Name: user_button_press_timer_cb
+********************************************************************************
+* Summary:
+*  - Start the user button press debounce timer
+*
+* Parameters:
+*  id - Timer ID for which callback is being generated
+*  callbackContext - Timer module Context
+*
+* Return:
+*  None
+*
+*******************************************************************************/
+void user_button_press_timer_cb (cy_timer_id_t id, void *callbackContext)
 {
     if(0UL == Cy_GPIO_Read(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_NUM))
     {
@@ -233,7 +627,19 @@ void user_button_press_timer_cb (
                     user_button_press_timer_cb);
 }
 
-/* The Below section of code handles the GPIO interrupt for User button Press */
+/*******************************************************************************
+* Function Name: gpio_interrupt_handler
+********************************************************************************
+* Summary:
+*  - Handles the GPIO interrupt for User button Press
+*
+* Parameters:
+*  none
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void gpio_interrupt_handler(void)
 {
     if(1UL == Cy_GPIO_GetInterruptStatus(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_NUM))
@@ -281,7 +687,20 @@ void gpio_interrupt_handler(void)
 volatile bool temperature_sensor_read_flag = false;
 #define TIMER_PERIOD_MSEC                    2000U
 
-/* This function handles the timer interrupt that set the flag for the DPS310 temperature sensor to be read.*/
+/*******************************************************************************
+* Function Name: timer_interrupt_handler
+********************************************************************************
+* Summary:
+*  - Handles the timer interrupt that set the flag for the DPS310 temperature
+*     sensor to be read
+*
+* Parameters:
+*  none
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void timer_interrupt_handler(void)
 {
     /* Clear the terminal count interrupt */
@@ -292,7 +711,20 @@ void timer_interrupt_handler(void)
 #endif /* ENABLE_DPS310_I2C_INTERFACE */
 }
 
-/* This function handles the initialization of the Timer modules used to measure the temperature data periodically */
+/*******************************************************************************
+* Function Name: init_sensor_timer_module
+********************************************************************************
+* Summary:
+*  - Handles the initialization of the Timer modules used to measure the temperature
+*     data periodically
+*
+* Parameters:
+*  none
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void init_sensor_timer_module (void)
 {
     /* Start the TCPWM component in timer/counter mode. The return value of the
@@ -304,7 +736,7 @@ void init_sensor_timer_module (void)
     result = Cy_TCPWM_Counter_Init(CYBSP_TIMER_HW, CYBSP_TIMER_NUM, &CYBSP_TIMER_config);
     if(result != CY_TCPWM_SUCCESS)
     {
-        CY_ASSERT(CY_ASSERT_FAILED);
+        CY_ASSERT(0);
     }
 
     Cy_TCPWM_Counter_Enable(CYBSP_TIMER_HW, CYBSP_TIMER_NUM);
@@ -328,7 +760,19 @@ void init_sensor_timer_module (void)
 
 }
 
-/* Below function disables the Timer module */
+/*******************************************************************************
+* Function Name: deinit_sensor_timer_module
+********************************************************************************
+* Summary:
+*  - Disables the Timer module
+*
+* Parameters:
+*  none
+*
+* Return:
+*  none
+*
+*******************************************************************************/
 void deinit_sensor_timer_module(void)
 {
     Cy_TCPWM_Counter_Disable(CYBSP_TIMER_HW, CYBSP_TIMER_NUM);
@@ -336,39 +780,48 @@ void deinit_sensor_timer_module(void)
 
 #endif /* ENABLE_DPS310_I2C_INTERFACE */
 
+/*******************************************************************************
+* Function Name: main
+********************************************************************************
+* Summary:
+*  System entrance point. This function performs
+*  - Initial setup of device
+*  - Enables Watchdog timer, USBPD interrupts
+*  - Initializes USBPD block and PDStack
+*  - Runs device policy tasks and application level tasks
+*
+* Parameters:
+*  None
+*
+* Return:
+*  int
+*
+*******************************************************************************/
 int main(void)
 {
     cy_rslt_t result;
     cy_en_sysint_status_t intr_result;
     cy_stc_pdutils_timer_config_t timerConfig;
-    cy_en_usbpd_status_t usbpd_result;
+    cy_stc_scb_uart_context_t CYBSP_UART_context;
 
     /* Initialize the device and board peripherals */
     result = cybsp_init() ;
     if (result != CY_RSLT_SUCCESS)
     {
-        CY_ASSERT(CY_ASSERT_FAILED);
+        CY_ASSERT(0);
     }
 
 #if DEBUG_PRINT
-
      /* Configure and enable the UART peripheral */
      Cy_SCB_UART_Init(CYBSP_UART_HW, &CYBSP_UART_config, &CYBSP_UART_context);
      Cy_SCB_UART_Enable(CYBSP_UART_HW);
-
-#endif
-
+#endif /* DEBUG_PRINT */
 
     /*
      * Register the interrupt handler for the watchdog timer. This timer is used to
      * implement the soft timers required by the USB-PD Stack.
      */
-    intr_result = Cy_SysInt_Init(&wdt_interrupt_config, &wdt_interrupt_handler);
-    if (intr_result != CY_SYSINT_SUCCESS)
-    {   
-        CY_ASSERT(CY_ASSERT_FAILED);
-    }
-
+    Cy_SysInt_Init(&wdt_interrupt_config, &wdt_interrupt_handler);
     NVIC_EnableIRQ(wdt_interrupt_config.intrSrc);
 
     timerConfig.sys_clk_freq = Cy_SysClk_ClkSysGetFrequency();
@@ -386,8 +839,8 @@ int main(void)
     };
     intr_result = Cy_SysInt_Init(&intrCfg, timer_interrupt_handler);
     if (intr_result != CY_SYSINT_SUCCESS)
-    {   
-        CY_ASSERT(CY_ASSERT_FAILED);
+    {
+        CY_ASSERT(0);
     }
     /* Enable Timer Interrupt */
     NVIC_EnableIRQ(intrCfg.intrSrc);
@@ -403,7 +856,7 @@ int main(void)
     intr_result = Cy_SysInt_Init(&gpioIntrCfg, gpio_interrupt_handler);
     if (intr_result != CY_SYSINT_SUCCESS)
     {
-        CY_ASSERT(CY_ASSERT_FAILED);
+        CY_ASSERT(0);
     }
 
     /* Enable GPIO Interrupt */
@@ -420,38 +873,39 @@ int main(void)
     __enable_irq();
 
     /* Initialize the instrumentation related data structures. */
-    instrumentation_init();
+    Cy_App_Instrumentation_Init(&gl_TimerCtx);
 
     /* Register callback function to be executed when instrumentation fault occurs. */
-    instrumentation_register_cb((instrumentation_cb_t)instrumentation_cb);
+    Cy_App_Instrumentation_RegisterCb((cy_app_instrumentation_cb_t)instrumentation_cb);
 
     /* Configure and enable the USBPD interrupts */
-    intr_result = Cy_SysInt_Init(&usbpd_port0_intr0_config, &cy_usbpd0_intr0_handler);
-    if (intr_result != CY_SYSINT_SUCCESS)
-    {
-        CY_ASSERT(CY_ASSERT_FAILED);
-    }
+    Cy_SysInt_Init(&usbpd_port0_intr0_config, &cy_usbpd0_intr0_handler);
     NVIC_EnableIRQ(usbpd_port0_intr0_config.intrSrc);
 
-    intr_result = Cy_SysInt_Init(&usbpd_port0_intr1_config, &cy_usbpd0_intr1_handler);
-    if (intr_result != CY_SYSINT_SUCCESS)
-    {
-        CY_ASSERT(CY_ASSERT_FAILED);
-    }
+    Cy_SysInt_Init(&usbpd_port0_intr1_config, &cy_usbpd0_intr1_handler);
     NVIC_EnableIRQ(usbpd_port0_intr1_config.intrSrc);
+
+#if PMG1_PD_DUALPORT_ENABLE
+    /* Configure and enable the USBPD interrupts for Port #1. */
+    Cy_SysInt_Init(&usbpd_port1_intr0_config, &cy_usbpd1_intr0_handler);
+    NVIC_EnableIRQ(usbpd_port1_intr0_config.intrSrc);
+
+    Cy_SysInt_Init(&usbpd_port1_intr1_config, &cy_usbpd1_intr1_handler);
+    NVIC_EnableIRQ(usbpd_port1_intr1_config.intrSrc);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
     /* Initialize the USBPD driver */
 #if defined(CY_DEVICE_CCG3)
-    usbpd_result = Cy_USBPD_Init(&gl_UsbPdPort0Ctx, 0, mtb_usbpd_port0_HW, NULL,
+    Cy_USBPD_Init(&gl_UsbPdPort0Ctx, 0, mtb_usbpd_port0_HW, NULL,
             (cy_stc_usbpd_config_t *)&mtb_usbpd_port0_config, get_dpm_connect_stat);
 #else
-    usbpd_result = Cy_USBPD_Init(&gl_UsbPdPort0Ctx, 0, mtb_usbpd_port0_HW, mtb_usbpd_port0_HW_TRIM,
+    Cy_USBPD_Init(&gl_UsbPdPort0Ctx, 0, mtb_usbpd_port0_HW, mtb_usbpd_port0_HW_TRIM,
             (cy_stc_usbpd_config_t *)&mtb_usbpd_port0_config, get_dpm_connect_stat);
+#if PMG1_PD_DUALPORT_ENABLE
+    Cy_USBPD_Init(&gl_UsbPdPort1Ctx, 1, mtb_usbpd_port1_HW, mtb_usbpd_port1_HW_TRIM,
+            (cy_stc_usbpd_config_t *)&mtb_usbpd_port1_config, get_dpm_port1_connect_stat);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 #endif
-    if (usbpd_result != CY_USBPD_STAT_SUCCESS)
-    {
-        CY_ASSERT(CY_ASSERT_FAILED);
-    }
 
     /* Initialize the Device Policy Manager. */
     Cy_PdStack_Dpm_Init(&gl_PdStackPort0Ctx,
@@ -461,29 +915,66 @@ int main(void)
                        &pdstack_port0_dpm_params,
                        &gl_TimerCtx);
 
+#if PMG1_PD_DUALPORT_ENABLE
+    Cy_PdStack_Dpm_Init(&gl_PdStackPort1Ctx,
+                       &gl_UsbPdPort1Ctx,
+                       &mtb_usbpd_port1_pdstack_config,
+                       app_get_callback_ptr(&gl_PdStackPort1Ctx),
+                       &pdstack_port1_dpm_params,
+                       &gl_TimerCtx);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+
     /* Perform application level initialization. */
-    app_init(&gl_PdStackPort0Ctx);
+    Cy_App_Init(&gl_PdStackPort0Ctx, &port0_app_params);
+#if PMG1_PD_DUALPORT_ENABLE
+    Cy_App_Init(&gl_PdStackPort1Ctx, &port1_app_params);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
     /* Initialize the fault configuration values */
-    fault_handler_init_vars(&gl_PdStackPort0Ctx);
+    Cy_App_Fault_InitVars(&gl_PdStackPort0Ctx);
+#if PMG1_PD_DUALPORT_ENABLE
+    Cy_App_Fault_InitVars(&gl_PdStackPort1Ctx);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
     /* Start any timers or tasks associated with application instrumentation. */
-    instrumentation_start();
+    Cy_App_Instrumentation_Start();
 
     /* Start the device policy manager operation. This will initialize the USB-PD block and enable connect detection. */
     Cy_PdStack_Dpm_Start(&gl_PdStackPort0Ctx);
+#if PMG1_PD_DUALPORT_ENABLE
+    Cy_PdStack_Dpm_Start(&gl_PdStackPort1Ctx);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
-     /*
-     * After the initialization is complete, keep processing the
-     * USB-PD device policy manager task in a loop.
+#if APP_FW_LED_ENABLE
+    /* Start a timer that will blink the FW ACTIVE LED. */
+    Cy_PdUtils_SwTimer_Start (&gl_TimerCtx, (void *)&gl_PdStackPort0Ctx, (cy_timer_id_t)LED_TIMER_ID,
+            LED_TIMER_PERIOD_DETACHED, led_timer_cb);
+#if PMG1_PD_DUALPORT_ENABLE
+    /* Start a timer that will blink the FW ACTIVE LED. */
+    Cy_PdUtils_SwTimer_Start (&gl_TimerCtx, (void *)&gl_PdStackPort1Ctx, (cy_timer_id_t)LED2_TIMER_ID,
+            LED_TIMER_PERIOD_DETACHED, led_timer_cb);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+
+#endif /* APP_FW_LED_ENABLE */
+
+    /*
+     * After the initialization is complete, keep processing the USB-PD device policy manager task in a loop.
+     * Since this application does not have any other function, the PMG1 device can be placed in "deep sleep"
+     * mode for power saving whenever the PD stack and drivers are idle.
      */
     for (;;)
     {
         /* Handle the device policy tasks for each PD port. */
         Cy_PdStack_Dpm_Task(&gl_PdStackPort0Ctx);
+#if PMG1_PD_DUALPORT_ENABLE
+        Cy_PdStack_Dpm_Task(&gl_PdStackPort1Ctx);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
         /* Perform any application level tasks. */
-        app_task(&gl_PdStackPort0Ctx);
+        Cy_App_Task(&gl_PdStackPort0Ctx);
+#if PMG1_PD_DUALPORT_ENABLE
+        Cy_App_Task(&gl_PdStackPort1Ctx);
+#endif /* PMG1_PD_DUALPORT_ENABLE */
 
 #if ENABLE_DPS310_I2C_INTERFACE
         /* Check if the System state is moved to ON and Initialize the DPS310 Sensor */
@@ -531,7 +1022,7 @@ int main(void)
                 (gl_PdStackPort0Ctx.dpmConfig.attach == true))
             {
                 Cy_GPIO_Write(CYBSP_USER_LED_PORT, CYBSP_USER_LED_NUM, 0x00);
-                sink_fet_on(&gl_PdStackPort0Ctx);
+                soln_sink_fet_on(&gl_PdStackPort0Ctx);
 
 #if DEBUG_PRINT
                 /* Print Debug messages over UART */
@@ -547,7 +1038,7 @@ int main(void)
             else
             {
                 Cy_GPIO_Write(CYBSP_USER_LED_PORT, CYBSP_USER_LED_NUM, 0x01);
-                sink_fet_off(&gl_PdStackPort0Ctx);
+                soln_sink_fet_off(&gl_PdStackPort0Ctx);
 
 #if DEBUG_PRINT
                 /* Print Debug messages over UART */
@@ -566,16 +1057,17 @@ int main(void)
         }
 
         /* Perform tasks associated with instrumentation. */
-        instrumentation_task();
+        Cy_App_Instrumentation_Task();
 
 #if SYS_DEEPSLEEP_ENABLE
         /* If possible, enter deep sleep mode for power saving. */
-        if(sys_pwr_state == SYSTEM_PWR_STATE_OFF)
-        {
-            system_sleep(&gl_PdStackPort0Ctx,
-                    NULL
-                    );
-        }
+        Cy_App_SystemSleep(&gl_PdStackPort0Ctx,
+#if PMG1_PD_DUALPORT_ENABLE
+                &gl_PdStackPort1Ctx
+#else
+                NULL
+#endif /* PMG1_PD_DUALPORT_ENABLE */
+                );
 #endif /* SYS_DEEPSLEEP_ENABLE */
     }
 }

@@ -7,7 +7,7 @@
 #
 ################################################################################
 # \copyright
-# Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company)
+# Copyright 2021-2024, Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,29 +28,31 @@
 # Basic Configuration
 ################################################################################
 
-# Type of ModusToolbox Makefile Options include:
+#Type of ModusToolbox Makefile Options include:
 #
-# COMBINED    -- Top Level Makefile usually for single standalone application
-# APPLICATION -- Top Level Makefile usually for multi project application
-# PROJECT     -- Project Makefile under Application
+#COMBINED    -- Top Level Makefile usually for single standalone application
+#APPLICATION -- Top Level Makefile usually for multi project application
+#PROJECT     -- Project Makefile under Application
 #
 MTB_TYPE=COMBINED
 
 # Target board/hardware (BSP).
-# To change the target, it is recommended to use the Library manager
-# ('make library-manager' from command line), which will also update Eclipse IDE launch
-# configurations.
-TARGET=PMG1-CY7111
+# To change the target, it is recommended to use the Library manager 
+# ('make modlibs' from command line), which will also update Eclipse IDE launch 
+# configurations. If TARGET is manually edited, ensure TARGET_<BSP>.mtb with a 
+# valid URL exists in the application, run 'make getlibs' to fetch BSP contents
+# and update or regenerate launch configurations for your IDE.
+TARGET=PMG1-CY7110
 
 # Name of application (used to derive name of final linked file).
-#
+# 
 # If APPNAME is edited, ensure to update or regenerate launch
 # configurations for your IDE.
 APPNAME=mtb-example-pmg1-usbpd-sink-dps310-i2c-sensor
 
 # Name of toolchain to use. Options include:
 #
-# GCC_ARM -- GCC provided with ModusToolbox software
+# GCC_ARM -- GCC provided with ModusToolbox IDE
 # ARM     -- ARM Compiler (must be installed separately)
 # IAR     -- IAR Compiler (must be installed separately)
 #
@@ -68,7 +70,7 @@ TOOLCHAIN=GCC_ARM
 CONFIG=Debug
 
 # If set to "true" or "1", display full command-lines when building.
-VERBOSE=
+VERBOSE=true
 
 
 ################################################################################
@@ -102,8 +104,23 @@ INCLUDES=
 
 # Add additional defines to the build process (without a leading -D).
 # Enabled PD revision 3.0 support, VBus OV Fault Protection and Deep Sleep mode in idle states.
-DEFINES=CY_PD_SINK_ONLY=1 CY_PD_REV3_ENABLE=1 VBUS_OVP_ENABLE=1 VBUS_UVP_ENABLE=0 SYS_DEEPSLEEP_ENABLE=1 BATTERY_CHARGING_ENABLE=1
+DEFINES=CY_PD_SINK_ONLY=1 CY_PD_REV3_ENABLE=1 VBUS_OVP_ENABLE=1 VBUS_UVP_ENABLE=0 SYS_DEEPSLEEP_ENABLE=1 BATTERY_CHARGING_ENABLE=1 \
+        MINOR_SVDM_VER_SUPPORT=1 CY_APP_ROLE_PREFERENCE_ENABLE=0 CY_APP_POWER_ROLE_PREFERENCE_ENABLE=0 \
+        LEGACY_PD_PARALLEL_OPER=1 APPLE_SINK_DISABLE=0
 
+ifeq ($(TARGET), APP_PMG1-CY7110)
+    DEFINES+=PMG1_FLIPPED_FET_CTRL=1 CY_APP_VBUS_C_FET_CTRL=1
+endif
+
+ifeq ($(TARGET), APP_EVAL_PMG1_S3_DUALDRP)
+    DEFINES+=CY_APP_SINK_FET_CTRL_GPIO_EN=1
+endif
+
+ifneq (,$(filter APP_PMG1-CY7110 APP_PMG1-CY7113 APP_EVAL_PMG1_S3_DUALDRP, $(TARGET)))
+    DEFINES+=QC_AFC_CHARGING_DISABLED=0 QC_AFC_SNK_EN=1
+else
+    DEFINES+=QC_AFC_CHARGING_DISABLED=1 QC_AFC_SNK_EN=0
+endif
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT=
 
@@ -166,11 +183,11 @@ CY_GETLIBS_SHARED_NAME=mtb_shared
 # Absolute path to the compiler's "bin" directory.
 #
 # The default depends on the selected TOOLCHAIN (GCC_ARM uses the ModusToolbox
-# software provided compiler by default).
+# IDE provided compiler by default).
 CY_COMPILER_PATH=
 
 
-# Locate ModusToolbox helper tools folders in default installation
+# Locate ModusToolbox IDE helper tools folders in default installation
 # locations for Windows, Linux, and macOS.
 CY_WIN_HOME=$(subst \,/,$(USERPROFILE))
 CY_TOOLS_PATHS ?= $(wildcard \
@@ -178,7 +195,7 @@ CY_TOOLS_PATHS ?= $(wildcard \
     $(HOME)/ModusToolbox/tools_* \
     /Applications/ModusToolbox/tools_*)
 
-# If you install ModusToolbox software in a custom location, add the path to its
+# If you install ModusToolbox IDE in a custom location, add the path to its
 # "tools_X.Y" folder (where X and Y are the version number of the tools
 # folder). Make sure you use forward slashes.
 CY_TOOLS_PATHS+=

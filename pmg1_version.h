@@ -1,15 +1,10 @@
 /******************************************************************************
-* File Name: instrumentation.h
+* @file pmg1_version.h
 *
-* Description: This header file defines data structures and function prototypes
-*              to monitor CPU resource (execution time and stack) usage in the
-*              PMG1 MCU USB-PD Sink with DPS310 I2C Sensor Code Example for
-*              ModusToolBox.
-*
-* Related Document: See README.md
+* @brief This file defines the version details of the PMG1 Code Example.
 *
 *******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2024, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -41,49 +36,43 @@
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
-#ifndef _INSTRUMENTATION_H_
-#define _INSTRUMENTATION_H_
-
-#include <stdint.h>
+#ifndef _PMG1_VERSION_H_
+#define _PMG1_VERSION_H_
 
 /**
- * @brief Enumeration of all instrumentation fault events.
+   @brief Major version of the PMG1 CE.
  */
-typedef enum instrumentation_events
-{
-    INST_EVT_WDT_RESET = 0,                 /**< 0x00: Instrumentation fault event for watchdog reset. */
-    INST_EVT_HARD_FAULT = 1                 /**< 0x01: Instrumentation fault event for hard fault. */
-} inst_evt_t;
+#define PMG1_CE_MAJOR_VERSION                                (4)
 
 /**
- * @brief Callback function to solution level handler for instrumentation faults.
+   @brief Minor version of the PMG1 CE.
  */
-typedef void (*instrumentation_cb_t)(uint8_t port, uint8_t evt);
+#define PMG1_CE_MINOR_VERSION                                (0)
 
 /**
- * @brief Initialize data structures associated with application instrumentation.
- * @return None
+   @brief Patch version of the PMG1 CE.
  */
-void instrumentation_init(void);
+#define PMG1_CE_PATCH_VERSION                                (0)
 
 /**
- * @brief Start any timers or tasks associated with application instrumentation.
- * @return None
+   @brief Build number of the PMG1 CE. Base Build number: 0000
+          When the value reaches 9999 this shall be reset to 0.
  */
-void instrumentation_start(void);
+#define PMG1_CE_BUILD_NUMBER                                 (46)
 
 /**
- * @brief Perform tasks associated with application instrumentation. The specific
- * functionality implemented is user defined and can vary.
- * @return None
+ *  @brief Composite PMG1 CE version value.
+ *
+ *  PMG1 CE version value. This is a 4 byte value with the following format:
+ *  Bytes 1-0: Build number
+ *  Byte    2: Patch version
+ *  Byte 3 (Bits 0:3): Minor Version
+ *  Byte 3 (Bits 4:7): Major Version
  */
-void instrumentation_task(void);
+#define PMG1_CE_BASE_VERSION                                             \
+        ((PMG1_CE_MAJOR_VERSION << 28) | (PMG1_CE_MINOR_VERSION << 24) |      \
+        (PMG1_CE_PATCH_VERSION << 16) | (PMG1_CE_BUILD_NUMBER))
 
-/**
- * @brief Register solution level callback function to be executed when instrumentation fault occurs.
- * @return None
- */
-void instrumentation_register_cb(instrumentation_cb_t cb);
+#endif /* _PMG1_VERSION_H_ */
 
-#endif /* _INSTRUMENTATION_H_ */
-
+/* End of file */

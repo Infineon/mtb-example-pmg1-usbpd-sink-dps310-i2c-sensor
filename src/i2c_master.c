@@ -8,7 +8,7 @@
 * Related Document: See Readme.md
 *
 ********************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -61,8 +61,9 @@
 extern cy_stc_pdutils_sw_timer_t gl_TimerCtx;
 extern cy_stc_pdstack_context_t gl_PdStackPort0Ctx;
 
- /* Timer used to ensure I2C transfers to the MPS complete on time. */
+/* Timer used to ensure I2C transfers to the MPS complete on time. */
 #define SCB_I2C_TIMER_ID                            (0xC3u)
+
 /* The MPS transfer timeout is set to 10 ms timeout period. */
 #define SCB_I2C_TIMER_PERIOD                        (10u)
 
@@ -74,10 +75,7 @@ static void i2c_xfer_timer_cb(
         cy_timer_id_t id,            /**< Timer ID for which callback is being generated. */
         void *callbackContext)       /**< Timer module Context. */
 {
-    /*
-     * I2C transmission to MUX continues longer than timeout. Slave doesn't
-     * respond.
-     */
+    /* I2C transmission to MUX continues longer than timeout. Slave doesn't respond. */
     i2c_xfer_timeout = true;
 }
 
@@ -94,22 +92,24 @@ cy_stc_scb_i2c_master_xfer_config_t masterTransferCfg =
     .xferPending  = false
 };
 
-/** The instance-specific context structure.
- * It is used by the driver for internal configuration and
- * data keeping for the I2C. Do not modify anything in this structure.
- */
+/*******************************************************************************
+* The instance-specific context structure.
+* It is used by the driver for internal configuration and
+* data keeping for the I2C. Do not modify anything in this structure.
+*******************************************************************************/
 static cy_stc_scb_i2c_context_t CYBSP_I2C_context;
 
 /*******************************************************************************
-* Function Declaration
-*******************************************************************************/
-void CYBSP_I2C_Interrupt(void);
-/*******************************************************************************
 * Function Name: CYBSP_I2C_Interrupt
-****************************************************************************//**
-*
+********************************************************************************
 * Summary:
-*   Invokes the Cy_SCB_I2C_Interrupt() PDL driver function.
+*   - Invokes the Cy_SCB_I2C_Interrupt() PDL driver function
+*
+* Parameters:
+*  none
+*
+* Return:
+*  none
 *
 *******************************************************************************/
 void CYBSP_I2C_Interrupt(void)
@@ -120,12 +120,14 @@ void CYBSP_I2C_Interrupt(void)
 /*******************************************************************************
 * Function Name: InitI2CMaster
 ********************************************************************************
-*
 * Summary:
-*   This function initializes and enables master SCB
+*   - Initializes and enables master SCB
+*
+* Parameters:
+*  none
 *
 * Return:
-*   Status of initialization
+*  int
 *
 *******************************************************************************/
 uint32_t InitI2CMaster(void)
@@ -159,18 +161,16 @@ uint32_t InitI2CMaster(void)
 /*******************************************************************************
 * Function Name: DPS310_I2CRegRead
 ********************************************************************************
-*
 * Summary:
-*   This function performs I2C register Reads from the DPS310 Sensor
+*   - This function performs I2C register Reads from the DPS310 Sensor
 *
 * Parameter:
-*     regAddr: DPS310 Register address that needs to be read
-*     read_buffer: The read register value will be stored in this read_buffer
-*     count: No of bytes that needs to be read from the regAddr
+*   regAddr: DPS310 Register address that needs to be read
+*   read_buffer: The read register value will be stored in this read_buffer
+*   count: No of bytes that needs to be read from the regAddr
 *
 * Return:
-*   Status of I2C read. Returns I2C_SUCCESS upon successful completion of register
-*   read . Otherwise the function returns I2C_FAILURE
+*   int
 *
 *******************************************************************************/
 uint32_t DPS310_I2CRegRead (uint8_t regAddr, uint8_t *read_buffer , uint8_t count)
@@ -213,7 +213,6 @@ uint32_t DPS310_I2CRegRead (uint8_t regAddr, uint8_t *read_buffer , uint8_t coun
             do
             {
                 masterStatus  = Cy_SCB_I2C_MasterGetStatus(CYBSP_I2C_HW, &CYBSP_I2C_context);
-                //Cy_SysLib_DelayUs(CY_SCB_WAIT_DELAY);
 
             } while ((0UL != (masterStatus & CY_SCB_I2C_MASTER_BUSY)) && (!i2c_xfer_timeout));
 
@@ -231,18 +230,16 @@ uint32_t DPS310_I2CRegRead (uint8_t regAddr, uint8_t *read_buffer , uint8_t coun
 /*******************************************************************************
 * Function Name: DPS310_I2CRegWrite
 ********************************************************************************
-*
 * Summary:
-*   This function performs I2C write to the DPS310 Sensor Registers
+*   - This function performs I2C write to the DPS310 Sensor Registers
 *
 * Parameter:
-*     regAddr: DPS310 Register address that needs to be written
-*     write_buffer: Data that needs to written to the register r
-*     count: No of bytes that needs to be written to the regAddr
+*   regAddr: DPS310 Register address that needs to be written
+*   write_buffer: Data that needs to written to the register r
+*   count: No of bytes that needs to be written to the regAddr
 *
 * Return:
-*   Status of I2C read. Returns I2C_SUCCESS upon successful completion of register
-*   read . Otherwise the function returns I2C_FAILURE
+*   int
 *
 *******************************************************************************/
 uint32_t DPS310_I2CRegWrite (uint8_t regAddr, uint8_t *write_buffer, uint8_t count)

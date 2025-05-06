@@ -3,13 +3,13 @@
 *
 * Description: This header file defines the data structures and function
 *              prototypes associated with the BC 1.2 (legacy) charger detect
-*              module as part of the PMG1 MCU USBPD Sink with DPS310 I2C Sensor
-*              Code Example for ModusToolBox.
+*              module as part of the PMG1 MCU USBPD Sink PPS demo Example for
+*              ModusToolBox.
 *
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -61,13 +61,10 @@
 #define BC_CMP_1_IDX                    (1u)    /**< Battery charger comparator #2. */
 
 /*******************************************************************************
- * Data Structure Definition
- ******************************************************************************/
-
-/**
- * @typedef chgdet_fsm_evt_t
- * @brief List of charger detect events notified by the PDL.
- */
+* Data Structure Definition
+* @typedef chgdet_fsm_evt_t
+* @brief List of charger detect events notified by the PDL.
+******************************************************************************/
 typedef enum
 {
     CHGDET_FSM_EVT_ENTRY = 0,                   /**<  0: Charger Detect Event: State entry. */
@@ -85,19 +82,19 @@ typedef enum
     CHGDET_FSM_MAX_EVTS                         /**< 12: Number of events. */
 } chgdet_fsm_evt_t;
 
-/**
- * @brief Union to hold Dp/Dm status.
- */
+/*******************************************************************************
+* @brief Union to hold Dp/Dm status.
+******************************************************************************/
 typedef union
 {
     uint16_t state;                                     /**< Combined status of Dp and Dm. */
     uint8_t  d[2];                                      /**< Individual status of Dp(d[0]) and Dm(d[1]). */
 } chgdet_dp_dm_state_t;
 
-/**
- * @typedef chgdet_state_t
- * @brief List of states in the legacy battery charging state machine.
- */
+/*******************************************************************************
+* @typedef chgdet_state_t
+* @brief List of states in the legacy battery charging state machine.
+*******************************************************************************/
 typedef enum{
     CHGDET_FSM_OFF = 0,                                 /**< BC state machine inactive. */
     CHGDET_FSM_SINK_START,                              /**< BC sink state machine start state. */
@@ -110,10 +107,10 @@ typedef enum{
     CHGDET_FSM_MAX_STATES,                              /**< Invalid state ID. */
 } chgdet_state_t;
 
-/**
- * @typedef chgdet_timer_t
- * @brief List of soft timers used by the charger detect state machine.
- */
+/*******************************************************************************
+* @typedef chgdet_timer_t
+* @brief List of soft timers used by the charger detect state machine.
+*******************************************************************************/
 typedef enum
 {
     CHGDET_TIMER_NONE = 0,                             /**< No timers running. */
@@ -121,12 +118,9 @@ typedef enum
 } chgdet_timer_t;
 
 /*******************************************************************************
- * Data Struct Definition
- ******************************************************************************/
-
-/**
- * @brief Struct to define battery charger status.
- */
+* Data Struct Definition
+* @brief Struct to define battery charger status.
+*******************************************************************************/
 typedef struct {
     chgdet_state_t chgdet_fsm_state;            /**< Current state of the BC state machine. */
     uint32_t       chgdet_evt;                  /**< Bitmap representing event notifications to the state machine. */
@@ -144,111 +138,22 @@ typedef struct {
 
 /*******************************************************************************
  * Global Function Declaration
- ******************************************************************************/
-
-/**
- * @brief This function initializes the Charger Detect block. This should be
- * called one time only at system startup for each port on which the charger detect
- * state machine needs to run.
- *
- * @param stack_ctx PD Stack context pointer.
- * @return cy_en_usbpd_status_t
- */
+*******************************************************************************/
 cy_en_usbpd_status_t chgdet_init(cy_stc_pdstack_context_t *stack_ctx);
-
-/**
- * @brief This function starts the Charger Detect block operation after Type-C
- * connection has been detected.
- *
- * @param stack_ctx PD Stack context pointer.
- * @return cy_en_usbpd_status_t
- */
 cy_en_usbpd_status_t chgdet_start(cy_stc_pdstack_context_t *stack_ctx);
-
-/**
- * @brief This function stops the Charger Detect block operation once Type-C
- * disconnect has been detected.
- *
- * @param stack_ctx PD Stack context pointer.
- * @return cy_en_usbpd_status_t
- */
 cy_en_usbpd_status_t chgdet_stop(cy_stc_pdstack_context_t *stack_ctx);
-
-/**
- * @brief This function returns whether the Charger Detect module is active or not.
- *
- * @param stack_ctx PD Stack context pointer.
- * @return true if the charger detect module is running, false otherwise.
- */
 bool chgdet_is_active(cy_stc_pdstack_context_t *stack_ctx);
-
-/**
- * @brief This function performs actions associated with the Charger Detect state
- * machine, and is expected to be called from the application main.
- *
- * @param stack_ctx PD Stack context pointer.
- * @return cy_en_usbpd_status_t
- */
 cy_en_usbpd_status_t chgdet_task(cy_stc_pdstack_context_t *stack_ctx);
-
-/**
- * @brief This function prepares the charger detect block for device entry into deep sleep
- * state.
- *
- * @param stack_ctx PD Stack context pointer.
- * @return Returns true if the deep sleep mode can be entered, false otherwise.
- */
 bool chgdet_prepare_deepsleep(cy_stc_pdstack_context_t *stack_ctx);
-
-/**
- * @brief This function restores the charger detect block into functional state after the
- * PMG1 device wakes from deep sleep.
- *
- * @param stack_ctx PD Stack context pointer.
- * @return void
- */
 void chgdet_resume(cy_stc_pdstack_context_t *stack_ctx);
-
-/**
- * @brief This function retrieves the current status of the charger detect state machine.
- *
- * @param stack_ctx PD Stack context pointer.
- * @return Pointer to charger detect status. The structure must not be modified by caller.
- */
 const chgdet_status_t* chgdet_get_status(cy_stc_pdstack_context_t *stack_ctx);
-
-/**
- * @brief This function updates the charger detect state machine based on event notifications
- * from the USB-PD Stack. This event handler calls the chgdet_start and chgdet_stop functions
- * as required.
- *
- * @param stack_ctx PD Stack context pointer.
- * @param evt USB-PD event ID.
- * @param dat Optional data associated with the event.
- * @return void
- */
 void chgdet_pd_event_handler(cy_stc_pdstack_context_t *stack_ctx, cy_en_pdstack_app_evt_t evt, const void* dat);
-
-/**
- * @brief This function sets an event status for the charger detect state machine to process.
- *
- * @param stack_ctx PD Stack context pointer.
- * @param evt_mask Mask specifying events to be set.
- *
- * @return void
- */
 void chgdet_fsm_set_evt(cy_stc_pdstack_context_t *stack_ctx, uint32_t evt_mask);
-
-/**
- * @brief This function clears one or more events after the charger detect state machine has
- * dealt with them.
- *
- * @param stack_ctx PD Stack context pointer.
- * @param evt_mask Event Mask to be cleared.
- * @return void
- */
 void chgdet_fsm_clear_evt(cy_stc_pdstack_context_t *stack_ctx, uint32_t evt_mask);
 
+/******************************************************************************
+ * End of declaration
+ ******************************************************************************/
 #endif /* __CHARGER_DETECT_H__ */
 
 /* End of File */

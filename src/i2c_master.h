@@ -8,7 +8,7 @@
 * Related Document: See Readme.md
 *
 ********************************************************************************
-* Copyright 2021-2023, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2021-2025, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -43,7 +43,7 @@
 #ifndef SOURCE_I2CMASTER_H_
 #define SOURCE_I2CMASTER_H_
 
-#include "cy_pdl.h"
+#include "cybsp.h"
 #include "cybsp.h"
 
 /*******************************************************************************
@@ -51,38 +51,40 @@
 *******************************************************************************/
 #define I2C_SUCCESS             (0UL)
 #define I2C_FAILURE             (1UL)
-
 #define TRANSFER_CMPLT          (0x00UL)
 #define READ_CMPLT              (TRANSFER_CMPLT)
 
 /* Start address of slave buffer */
 #define EZI2C_BUFFER_ADDRESS    (0x00)
-
 #define I2C_DPS310_SLAVE_ADDR   (0x77)
+#define WRITE_BUFF_SIZE         (2u)
 
 /*******************************************************************************
-* Function Prototypes
+* Global variables
 *******************************************************************************/
-
 typedef struct
 {
     uint8_t regAddress;
     uint8_t length;
 } RegBlock_t;
 
-#define WRITE_BUFF_SIZE         (2u)
-
-void ReadTemperatureSensor(void);
-uint32_t InitI2CMaster(void);
 
 extern bool is_sensor_rdy_to_init ;
 extern bool is_dps310_initialized;
 
+/******************************************************************************
+ * Global function declaration
+ ******************************************************************************/
+void ReadTemperatureSensor(void);
+uint32_t InitI2CMaster(void);
 void read_DPS310_tmp_and_psr_data(uint8_t is_tmp);
 void ReadDPS310Coefficient(void);
-
+void CYBSP_I2C_Interrupt(void);
 void Dps310init(void);
 void dps310_read_data (void);
 int isDps310InitComplete (void);
 
+/******************************************************************************
+ * End of declaration
+ ******************************************************************************/
 #endif /* SOURCE_I2CMASTER_H_ */
